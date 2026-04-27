@@ -6,6 +6,12 @@ import BackgroundDecor from '@/components/BackgroundDecor';
 export const metadata = {
   title: 'MASAR',
   description: 'Your path. Your records.',
+  appleWebApp: {
+    capable: true,
+    title: 'MASAR',
+    statusBarStyle: 'black-translucent',
+  },
+  formatDetection: { telephone: false },
 };
 
 export const viewport = {
