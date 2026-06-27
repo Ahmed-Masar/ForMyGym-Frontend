@@ -34,34 +34,31 @@ export default function ConfirmDialog({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <>
-          <motion.div
-            key="bd"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={onCancel}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 10998,
-              background: 'rgba(0,0,0,0.68)',
-              backdropFilter: 'blur(6px)',
-              WebkitBackdropFilter: 'blur(6px)',
-            }}
-          />
-
+        <motion.div
+          key="bd"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={onCancel}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 10998,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+            background: 'rgba(0,0,0,0.68)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+        >
           <motion.div
             key="dialog"
             initial={{ opacity: 0, scale: 0.94, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 8 }}
             transition={{ type: 'spring', stiffness: 420, damping: 38, mass: 0.7 }}
+            onClick={e => e.stopPropagation()}
             style={{
-              position: 'fixed',
-              zIndex: 10999,
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 'min(86vw, 340px)',
+              width: 'min(100%, 340px)',
               background: '#111111',
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 20,
@@ -101,7 +98,7 @@ export default function ConfirmDialog({
               </motion.button>
             </div>
           </motion.div>
-        </>
+        </motion.div>
       )}
     </AnimatePresence>,
     document.body

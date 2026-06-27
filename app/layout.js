@@ -1,4 +1,5 @@
 import './globals.css';
+import Script from 'next/script';
 import BottomNav from '@/components/BottomNav';
 import DesktopBlock from '@/components/DesktopBlock';
 import BackgroundDecor from '@/components/BackgroundDecor';
@@ -29,6 +30,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <Script id="app-height-init" strategy="beforeInteractive">
+          {`document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');`}
+        </Script>
         <ServerWakeup />
         <ViewportFix />
         <DesktopBlock />
@@ -37,7 +41,7 @@ export default function RootLayout({ children }) {
           style={{
             background: 'var(--bg)',
             position: 'relative',
-            height: '100dvh',
+            height: 'var(--app-height, 100dvh)',
             display: 'flex',
             flexDirection: 'column',
           }}

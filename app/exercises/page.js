@@ -10,6 +10,12 @@ import { useCounter } from '@/hooks/useCounter';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
+const DAYS = [
+  { id: 1, label: 'Chest & Biceps', categories: ['Chest', 'Biceps'] },
+  { id: 2, label: 'Back & Triceps', categories: ['Back', 'Triceps'] },
+  { id: 3, label: 'Shoulders', categories: ['Shoulders'] },
+  { id: 4, label: 'Legs', categories: ['Legs'] },
+];
 const fade = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
 
@@ -22,6 +28,7 @@ export default function ExercisesPage() {
   const [saving, setSaving]       = useState(false);
   const [deleting, setDeleting]   = useState(null);
   const [confirming, setConfirming] = useState(null);
+  const [activeDay, setActiveDay] = useState(null);
 
   const load = useCallback(() => api.exercises.list().then(setExercises), []);
 
@@ -56,7 +63,8 @@ export default function ExercisesPage() {
     finally { setDeleting(null); setConfirming(null); }
   }
 
-  const grouped = CATEGORIES.reduce((acc, cat) => {
+  const activeCategories = activeDay ? DAYS.find(d => d.id === activeDay).categories : CATEGORIES;
+  const grouped = CATEGORIES.filter(cat => activeCategories.includes(cat)).reduce((acc, cat) => {
     const list = exercises.filter(e => e.category === cat);
     if (list.length) acc[cat] = list;
     return acc;
@@ -91,6 +99,32 @@ export default function ExercisesPage() {
           <div className="mt-4 section-line" />
         </motion.div>
 
+        {/* Day Filter */}
+        <div
+          className="flex gap-2 mb-6 overflow-x-auto"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', paddingBottom: 2 }}
+        >
+          <motion.button
+            whileTap={{ scale: 0.93 }}
+            onClick={() => setActiveDay(null)}
+            className={`chip shrink-0 ${activeDay === null ? 'chip-active' : ''}`}
+            style={{ fontSize: 11, padding: '7px 14px' }}
+          >
+            All
+          </motion.button>
+          {DAYS.map(d => (
+            <motion.button
+              key={d.id}
+              whileTap={{ scale: 0.93 }}
+              onClick={() => setActiveDay(activeDay === d.id ? null : d.id)}
+              className={`chip shrink-0 ${activeDay === d.id ? 'chip-active' : ''}`}
+              style={{ fontSize: 11, padding: '7px 14px' }}
+            >
+              Day {d.id} · {d.label}
+            </motion.button>
+          ))}
+        </div>
+
         {exercises.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -100,6 +134,13 @@ export default function ExercisesPage() {
             <motion.button whileTap={{ scale: 0.97 }} onClick={openAdd} className="btn btn-ghost px-7 py-3.5">
               Add First Exercise
             </motion.button>
+          </motion.div>
+        ) : Object.keys(grouped).length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="flex flex-col items-center py-16 gap-4"
+          >
+            <p className="label">No exercises for this day</p>
           </motion.div>
         ) : (
           <motion.div variants={list} initial="hidden" animate="show" className="flex flex-col gap-7">
