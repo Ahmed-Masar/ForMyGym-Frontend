@@ -8,15 +8,20 @@ import { api } from '@/lib/api';
 import { useCounter } from '@/hooks/useCounter';
 import ExerciseChart from '@/components/ExerciseChart';
 import PageTransition from '@/components/PageTransition';
+import BottomSheet from '@/components/BottomSheet';
 
 const fade = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.065 } } };
+
+const vol = s => s.exercises.reduce((t, ex) => t + ex.sets.reduce((a, set) => a + set.reps * set.weight, 0), 0);
 
 export default function ExerciseDetailPage() {
   const { id } = useParams();
   const [exercise, setExercise]       = useState(null);
   const [progression, setProgression] = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [selected, setSelected]       = useState(null);
+  const [deleting, setDeleting]       = useState(null);
 
   useEffect(() => {
     Promise.all([api.exercises.list(), api.sessions.exercise(id)])
@@ -27,6 +32,17 @@ export default function ExerciseDetailPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function del(sessionId) {
+    setDeleting(sessionId);
+    try {
+      await api.sessions.remove(sessionId);
+      setProgression(p => p.filter(s => s._id !== sessionId));
+      setSelected(null);
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   const pr       = progression.length ? Math.max(...progression.map(p => p.maxWeight)) : 0;
   const totalVol = progression.reduce((a, p) => a + p.volume, 0);
@@ -150,27 +166,31 @@ export default function ExerciseDetailPage() {
                     variants={fade}
                     transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
                     whileTap={{ scale: 0.98 }}
-                    className="card flex items-center justify-between px-4 py-3.5"
                   >
-                    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
-                      {format(new Date(p.date), 'MMM d, yyyy')}
-                    </span>
-                    <div className="flex gap-5">
-                      <div className="text-right">
-                        <p className="num font-bold text-white" style={{ fontSize: 14 }}>
-                          {p.maxWeight}
-                          <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 2, color: 'rgba(255,255,255,0.35)' }}>kg</span>
-                        </p>
-                        <p className="label" style={{ fontSize: 8 }}>MAX</p>
+                    <button
+                      className="card w-full text-left flex flex-col gap-2.5 px-4 py-3.5"
+                      onClick={() => setSelected(p)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
+                          {format(new Date(p.date), 'MMM d, yyyy')}
+                        </span>
+                        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 16 }}>›</span>
                       </div>
-                      <div className="text-right">
-                        <p className="num font-bold" style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>
-                          {p.volume.toLocaleString()}
-                          <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 2, color: 'rgba(255,255,255,0.22)' }}>kg</span>
-                        </p>
-                        <p className="label" style={{ fontSize: 8 }}>VOL</p>
+                      <div className="flex flex-wrap gap-2">
+                        {p.sets.map((set, si) => (
+                          <span key={si} className="num" style={{
+                            fontSize: 13, fontWeight: 600,
+                            padding: '7px 14px', borderRadius: 999,
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: 'rgba(255,255,255,0.65)',
+                          }}>
+                            {set.reps} × {set.weight}kg
+                          </span>
+                        ))}
                       </div>
-                    </div>
+                    </button>
                   </motion.div>
                 ))}
               </motion.div>
@@ -180,6 +200,64 @@ export default function ExerciseDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Day Session Sheet */}
+      <BottomSheet
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected ? format(new Date(selected.date), 'EEE, MMM d · yyyy') : ''}
+      >
+        {selected && (
+          <div className="px-5 pt-4 pb-2 flex flex-col gap-4">
+            <div className="flex items-center justify-between px-4 py-3" style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: 14,
+            }}>
+              <span className="label">Volume</span>
+              <span className="num font-black text-white" style={{ fontSize: '1.4rem' }}>
+                {vol(selected).toLocaleString()}
+                <span className="font-normal text-sm ml-1" style={{ color: 'rgba(255,255,255,0.35)' }}>kg</span>
+              </span>
+            </div>
+
+            {selected.exercises.map((ex, i) => (
+              <div key={i}>
+                <div className="flex justify-between items-center mb-2.5">
+                  <span className="font-bold text-white" style={{ fontSize: 14 }}>{ex.exercise?.name ?? '—'}</span>
+                  <span className="num label">{Math.max(...ex.sets.map(s => s.weight))}kg max</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {ex.sets.map((set, si) => (
+                    <span key={si} className="num" style={{
+                      fontSize: 13, fontWeight: 600,
+                      padding: '7px 14px', borderRadius: 999,
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.65)',
+                    }}>
+                      {set.reps} × {set.weight}kg
+                    </span>
+                  ))}
+                </div>
+                {i < selected.exercises.length - 1 && (
+                  <div className="mt-4 divider" />
+                )}
+              </div>
+            ))}
+
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => del(selected._id)}
+              disabled={deleting === selected._id}
+              className="btn btn-danger w-full py-4 mt-2"
+              style={{ opacity: deleting === selected._id ? 0.4 : 1 }}
+            >
+              {deleting === selected._id ? 'Deleting...' : 'Delete Session'}
+            </motion.button>
+          </div>
+        )}
+      </BottomSheet>
     </PageTransition>
   );
 }

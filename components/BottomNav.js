@@ -55,6 +55,16 @@ const nav = [
       </svg>
     ),
   },
+  {
+    href: '/forearm',
+    label: 'Forearm',
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" fill={active ? 'currentColor' : 'none'} stroke="currentColor"/>
+        <path d="M9 8.5v4a3 3 0 003 3 3 3 0 003-3v-1.5" stroke={active ? '#050505' : 'currentColor'}/>
+      </svg>
+    ),
+  },
 ];
 
 export default function BottomNav() {
@@ -62,7 +72,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50"
+      className="relative z-50 shrink-0"
       style={{
         background: 'rgba(5,5,5,0.94)',
         borderTop: '1px solid rgba(255,255,255,0.07)',

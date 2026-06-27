@@ -2,6 +2,7 @@ import './globals.css';
 import BottomNav from '@/components/BottomNav';
 import DesktopBlock from '@/components/DesktopBlock';
 import BackgroundDecor from '@/components/BackgroundDecor';
+import ServerWakeup from '@/components/ServerWakeup';
 
 export const metadata = {
   title: 'MASAR',
@@ -26,10 +27,20 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <ServerWakeup />
         <DesktopBlock />
-        <div className="sm:hidden bg-grid min-h-dvh" style={{ background: 'var(--bg)', position: 'relative' }}>
+        <div
+          className="sm:hidden bg-grid"
+          style={{
+            background: 'var(--bg)',
+            position: 'relative',
+            height: '100dvh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <BackgroundDecor />
-          <main style={{ position: 'relative', zIndex: 1, paddingBottom: '80px' }}>
+          <main style={{ position: 'relative', zIndex: 1, flex: 1, overflowY: 'auto' }}>
             {children}
           </main>
           <BottomNav />
