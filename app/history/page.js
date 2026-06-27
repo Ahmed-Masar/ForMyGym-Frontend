@@ -62,7 +62,7 @@ export default function HistoryPage() {
             className="flex flex-col items-center py-16 gap-4"
           >
             <p className="label">No sessions yet</p>
-            <a href="/log" className="btn btn-ghost px-7 py-3.5">Log Session</a>
+            <a href="/exercises" className="btn btn-ghost px-7 py-3.5">Log Session</a>
           </motion.div>
         ) : (
           <motion.div variants={list} initial="hidden" animate="show" className="flex flex-col gap-2.5">

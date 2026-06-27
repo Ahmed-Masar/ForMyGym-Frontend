@@ -15,12 +15,12 @@ const nav = [
     ),
   },
   {
-    href: '/log',
-    label: 'Log',
+    href: '/calendar',
+    label: 'Calendar',
     icon: (active) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="9" fill={active ? 'currentColor' : 'none'} stroke="currentColor"/>
-        <path d="M12 8v4l2.5 2.5" stroke={active ? '#050505' : 'currentColor'}/>
+        <rect x="3" y="4" width="18" height="18" rx="3" fill={active ? 'currentColor' : 'none'} stroke="currentColor"/>
+        <path d="M16 2v4M8 2v4M3 10h18" stroke={active ? '#050505' : 'currentColor'}/>
       </svg>
     ),
   },

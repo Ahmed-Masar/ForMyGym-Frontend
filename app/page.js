@@ -215,7 +215,7 @@ function Empty() {
   return (
     <div className="flex flex-col items-center py-14 gap-4">
       <p className="label">No sessions yet</p>
-      <Link href="/log" className="btn btn-ghost px-7 py-3.5">Log First Session</Link>
+      <Link href="/exercises" className="btn btn-ghost px-7 py-3.5">Log First Session</Link>
     </div>
   );
 }

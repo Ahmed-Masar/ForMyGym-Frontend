@@ -19,6 +19,16 @@ export function PullToRefreshProvider({ children }) {
     return () => { if (refreshFnRef.current === fn) refreshFnRef.current = null; };
   }, []);
 
+  // iOS standalone PWAs only commit the real safe-area/viewport geometry after a scroll
+  // gesture. Force one synthetically on first mount so layout is correct before any
+  // user interaction, instead of waiting for the user to scroll once.
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    el.scrollTop = 1;
+    requestAnimationFrame(() => { el.scrollTop = 0; });
+  }, []);
+
   const onTouchStart = useCallback((e) => {
     if (refreshing || !refreshFnRef.current) return;
     // Bail while a modal (BottomSheet/ConfirmDialog) has body scroll locked, or mid-list.
@@ -56,7 +66,13 @@ export function PullToRefreshProvider({ children }) {
     <RefreshContext.Provider value={register}>
       <main
         ref={mainRef}
-        style={{ position: 'relative', zIndex: 1, flex: 1, overflowY: 'auto' }}
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          flex: 1,
+          overflowY: 'auto',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

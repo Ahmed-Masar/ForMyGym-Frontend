@@ -28,7 +28,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
         <Script id="app-height-init" strategy="beforeInteractive">
           {`document.documentElement.style.setProperty('--app-height', (window.visualViewport && window.visualViewport.height || window.innerHeight) + 'px');`}

@@ -1,13 +1,17 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import BottomSheet from '@/components/BottomSheet';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import DatePicker from '@/components/DatePicker';
 import PageTransition from '@/components/PageTransition';
 import { useCounter } from '@/hooks/useCounter';
 import { usePullToRefresh } from '@/components/PullToRefresh';
+
+const emptySet = () => ({ reps: '', weight: '' });
 
 const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
 const DAYS = [
@@ -29,6 +33,13 @@ export default function ExercisesPage() {
   const [deleting, setDeleting]   = useState(null);
   const [confirming, setConfirming] = useState(null);
   const [activeDay, setActiveDay] = useState(null);
+
+  const [logEx, setLogEx]         = useState(null);
+  const [logDate, setLogDate]     = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [logSets, setLogSets]     = useState([emptySet()]);
+  const [logSaving, setLogSaving] = useState(false);
+  const [logError, setLogError]   = useState('');
+  const [logSaved, setLogSaved]   = useState(false);
 
   const load = useCallback(() => api.exercises.list().then(setExercises), []);
 
@@ -61,6 +72,31 @@ export default function ExercisesPage() {
     setDeleting(id);
     try { await api.exercises.remove(id); setExercises(p => p.filter(e => e._id !== id)); }
     finally { setDeleting(null); setConfirming(null); }
+  }
+
+  function openLog(ex) {
+    setLogEx(ex);
+    setLogDate(format(new Date(), 'yyyy-MM-dd'));
+    setLogSets([emptySet()]);
+    setLogError('');
+    setLogSaved(false);
+  }
+
+  const addLogSet    = () => setLogSets(p => [...p, emptySet()]);
+  const removeLogSet = (i) => setLogSets(p => { const n = p.filter((_, j) => j !== i); return n.length ? n : [emptySet()]; });
+  const updLogSet     = (i, f, v) => setLogSets(p => p.map((s, j) => j === i ? { ...s, [f]: v } : s));
+
+  async function saveLog() {
+    const filtered = logSets.filter(s => s.reps && s.weight).map(s => ({ reps: +s.reps, weight: +s.weight }));
+    if (!filtered.length) { setLogError('Add at least one set.'); return; }
+    setLogError('');
+    setLogSaving(true);
+    try {
+      await api.sessions.log({ date: new Date(logDate).toISOString(), exerciseId: logEx._id, sets: filtered });
+      setLogSaved(true);
+      setTimeout(() => setLogEx(null), 600);
+    } catch (err) { setLogError(err.message); }
+    finally { setLogSaving(false); }
   }
 
   const activeCategories = activeDay ? DAYS.find(d => d.id === activeDay).categories : CATEGORIES;
@@ -169,6 +205,8 @@ export default function ExercisesPage() {
                           {ex.name}
                         </Link>
                         <div className="flex gap-2 shrink-0">
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => openLog(ex)}
+                            className="btn btn-primary px-3.5 py-2" style={{ fontSize: 11 }}>Log</motion.button>
                           <motion.button whileTap={{ scale: 0.95 }} onClick={() => openEdit(ex)}
                             className="btn btn-ghost px-3.5 py-2" style={{ fontSize: 11 }}>Edit</motion.button>
                           <motion.button
@@ -237,6 +275,88 @@ export default function ExercisesPage() {
         onConfirm={() => remove(confirming._id)}
         onCancel={() => setConfirming(null)}
       />
+
+      {/* Quick Log Sheet — log sets for an exercise without leaving this page */}
+      <BottomSheet
+        open={!!logEx}
+        onClose={() => setLogEx(null)}
+        title={logEx ? `Log · ${logEx.name}` : ''}
+      >
+        {logEx && (
+          <div className="px-5 pt-4 pb-2 flex flex-col gap-3">
+            <DatePicker value={logDate} onChange={setLogDate} />
+
+            <div className="grid grid-cols-11 gap-2 mt-1">
+              <span className="col-span-1" />
+              <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>REPS</span>
+              <span className="col-span-1" />
+              <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>KG</span>
+              <span className="col-span-1" />
+            </div>
+
+            <AnimatePresence>
+              {logSets.map((set, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 8 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid grid-cols-11 gap-2 items-center"
+                >
+                  <span className="col-span-1 num text-center" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
+                    {i + 1}
+                  </span>
+                  <input
+                    type="number" inputMode="numeric" placeholder="10"
+                    value={set.reps}
+                    onChange={e => updLogSet(i, 'reps', e.target.value)}
+                    className="col-span-4 inp text-center num"
+                    style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
+                  />
+                  <span className="col-span-1 text-center" style={{ color: 'rgba(255,255,255,0.15)', fontSize: 14 }}>×</span>
+                  <input
+                    type="number" inputMode="decimal" placeholder="60"
+                    value={set.weight}
+                    onChange={e => updLogSet(i, 'weight', e.target.value)}
+                    step="0.5"
+                    className="col-span-4 inp text-center num"
+                    style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
+                  />
+                  <button
+                    onClick={() => removeLogSet(i)}
+                    className="col-span-1 text-center"
+                    style={{ color: 'rgba(255,255,255,0.18)', fontSize: 20, lineHeight: 1 }}
+                  >×</button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            <motion.button whileTap={{ scale: 0.96 }} onClick={addLogSet} className="btn btn-ghost w-full py-3 mt-1">
+              + Add Set
+            </motion.button>
+
+            {logError && (
+              <p style={{ fontSize: 12, color: 'rgba(255,80,80,0.75)' }}>{logError}</p>
+            )}
+            {logSaved && !logSaving && (
+              <p className="label" style={{ fontSize: 12, color: 'rgba(120,255,150,0.7)' }}>Saved ✓</p>
+            )}
+
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={saveLog}
+              disabled={logSaving}
+              className="btn btn-primary w-full py-4 mt-1"
+              style={{ fontSize: 14, opacity: logSaving ? 0.32 : 1 }}
+            >
+              {logSaving ? 'Saving...' : 'Save'}
+            </motion.button>
+
+            <div className="h-2" />
+          </div>
+        )}
+      </BottomSheet>
     </PageTransition>
   );
 }
