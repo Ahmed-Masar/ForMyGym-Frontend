@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { format, startOfWeek, subWeeks } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -9,6 +9,7 @@ import PRCard from '@/components/PRCard';
 import SessionCard from '@/components/SessionCard';
 import WeekComparison from '@/components/WeekComparison';
 import PageTransition from '@/components/PageTransition';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const fade  = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
 const list  = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
@@ -42,12 +43,13 @@ export default function Dashboard() {
   const [prs, setPrs]           = useState([]);
   const [loading, setLoading]   = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() =>
     Promise.all([api.sessions.list(), api.sessions.prs()])
-      .then(([s, p]) => { setSessions(s); setPrs(p); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+      .then(([s, p]) => { setSessions(s); setPrs(p); }),
+  []);
+
+  useEffect(() => { load().catch(console.error).finally(() => setLoading(false)); }, [load]);
+  usePullToRefresh(load);
 
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const lastStart = subWeeks(weekStart, 1);

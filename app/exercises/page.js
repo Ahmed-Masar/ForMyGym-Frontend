@@ -1,13 +1,15 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import BottomSheet from '@/components/BottomSheet';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import PageTransition from '@/components/PageTransition';
 import { useCounter } from '@/hooks/useCounter';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 
-const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core', 'Cardio', 'Other'];
+const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
 const fade = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
 
@@ -19,10 +21,12 @@ export default function ExercisesPage() {
   const [form, setForm]           = useState({ name: '', category: 'Other' });
   const [saving, setSaving]       = useState(false);
   const [deleting, setDeleting]   = useState(null);
+  const [confirming, setConfirming] = useState(null);
 
-  useEffect(() => {
-    api.exercises.list().then(setExercises).catch(console.error).finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(() => api.exercises.list().then(setExercises), []);
+
+  useEffect(() => { load().catch(console.error).finally(() => setLoading(false)); }, [load]);
+  usePullToRefresh(load);
 
   const count = useCounter(exercises.length);
 
@@ -49,7 +53,7 @@ export default function ExercisesPage() {
   async function remove(id) {
     setDeleting(id);
     try { await api.exercises.remove(id); setExercises(p => p.filter(e => e._id !== id)); }
-    finally { setDeleting(null); }
+    finally { setDeleting(null); setConfirming(null); }
   }
 
   const grouped = CATEGORIES.reduce((acc, cat) => {
@@ -128,7 +132,7 @@ export default function ExercisesPage() {
                             className="btn btn-ghost px-3.5 py-2" style={{ fontSize: 11 }}>Edit</motion.button>
                           <motion.button
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => remove(ex._id)}
+                            onClick={() => setConfirming(ex)}
                             disabled={deleting === ex._id}
                             className="btn btn-danger px-3.5 py-2"
                             style={{ fontSize: 11, opacity: deleting === ex._id ? 0.5 : 1 }}
@@ -183,6 +187,15 @@ export default function ExercisesPage() {
           </motion.button>
         </form>
       </BottomSheet>
+
+      <ConfirmDialog
+        open={!!confirming}
+        title="Delete Exercise"
+        message={confirming ? `Delete "${confirming.name}"? This cannot be undone.` : ''}
+        loading={deleting === confirming?._id}
+        onConfirm={() => remove(confirming._id)}
+        onCancel={() => setConfirming(null)}
+      />
     </PageTransition>
   );
 }

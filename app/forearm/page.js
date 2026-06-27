@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import DatePicker from '@/components/DatePicker';
 import BottomSheet from '@/components/BottomSheet';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import PageTransition from '@/components/PageTransition';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const EXERCISES = ['Extensors', 'Flexors', 'Brachioradialis'];
 
@@ -19,31 +21,38 @@ export default function ForearmPage() {
   const [logs, setLogs]       = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
   const [streak, setStreak]   = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
   const [saved, setSaved]     = useState(false);
 
-  const refreshLogs = useCallback(() => {
-    api.forearm.list().then((all) => setLogs(all.filter(hasSets))).catch(console.error);
-    api.forearm.streak().then((r) => setStreak(r.streak)).catch(console.error);
-  }, []);
+  const refreshLogs = useCallback(() => Promise.all([
+    api.forearm.list().then((all) => setLogs(all.filter(hasSets))),
+    api.forearm.streak().then((r) => setStreak(r.streak)),
+  ]), []);
 
-  useEffect(() => { refreshLogs(); }, [refreshLogs]);
+  const fetchDate = useCallback((d) => api.forearm.byDate(d).then((log) => {
+    if (!log) { setExercises(emptyExercises()); return; }
+    setExercises(EXERCISES.map((name) => {
+      const found = log.exercises.find((e) => e.name === name);
+      const sets = found?.sets.map((s) => ({ reps: String(s.reps), weight: String(s.weight) })) || [];
+      return { name, sets: sets.length ? sets : [emptySet()] };
+    }));
+  }), []);
+
+  useEffect(() => { refreshLogs().catch(console.error); }, [refreshLogs]);
+
+  const refreshAll = useCallback(() =>
+    Promise.all([refreshLogs(), fetchDate(date)]),
+  [refreshLogs, fetchDate, date]);
+  usePullToRefresh(refreshAll);
 
   useEffect(() => {
     setLoading(true);
     setSaved(false);
-    api.forearm.byDate(date)
-      .then((log) => {
-        if (!log) { setExercises(emptyExercises()); return; }
-        setExercises(EXERCISES.map((name) => {
-          const found = log.exercises.find((e) => e.name === name);
-          const sets = found?.sets.map((s) => ({ reps: String(s.reps), weight: String(s.weight) })) || [];
-          return { name, sets: sets.length ? sets : [emptySet()] };
-        }));
-      })
+    fetchDate(date)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [date]);
@@ -83,7 +92,7 @@ export default function ForearmPage() {
       if (selectedLog && isSameDay(new Date(selectedLog.date), new Date(date))) {
         setExercises(emptyExercises());
       }
-    } finally { setDeleting(null); }
+    } finally { setDeleting(null); setConfirmDel(false); }
   }
 
   return (
@@ -272,7 +281,7 @@ export default function ForearmPage() {
       {/* Day detail sheet */}
       <BottomSheet
         open={!!selectedLog}
-        onClose={() => setSelectedLog(null)}
+        onClose={() => { setSelectedLog(null); setConfirmDel(false); }}
         title={selectedLog ? format(new Date(selectedLog.date), 'EEE, MMM d · yyyy') : ''}
       >
         {selectedLog && (
@@ -301,7 +310,7 @@ export default function ForearmPage() {
 
             <motion.button
               whileTap={{ scale: 0.97 }}
-              onClick={() => deleteLog(selectedLog._id)}
+              onClick={() => setConfirmDel(true)}
               disabled={deleting === selectedLog._id}
               className="btn btn-danger w-full py-4 mt-2"
               style={{ opacity: deleting === selectedLog._id ? 0.4 : 1 }}
@@ -311,6 +320,15 @@ export default function ForearmPage() {
           </div>
         )}
       </BottomSheet>
+
+      <ConfirmDialog
+        open={confirmDel}
+        title="Delete Day"
+        message="This day's forearm log will be permanently removed."
+        loading={deleting === selectedLog?._id}
+        onConfirm={() => deleteLog(selectedLog._id)}
+        onCancel={() => setConfirmDel(false)}
+      />
     </PageTransition>
   );
 }

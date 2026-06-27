@@ -1,11 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import DatePicker from '@/components/DatePicker';
 import PageTransition from '@/components/PageTransition';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const emptySet = () => ({ reps: '', weight: '' });
 
@@ -19,7 +20,10 @@ export default function LogPage() {
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
 
-  useEffect(() => { api.exercises.list().then(setExercises).catch(console.error); }, []);
+  const load = useCallback(() => api.exercises.list().then(setExercises), []);
+
+  useEffect(() => { load().catch(console.error); }, [load]);
+  usePullToRefresh(load);
 
   // Build category list from actual exercises
   const categories = ['All', ...Array.from(new Set(exercises.map(e => e.category))).sort()];

@@ -3,6 +3,8 @@ import BottomNav from '@/components/BottomNav';
 import DesktopBlock from '@/components/DesktopBlock';
 import BackgroundDecor from '@/components/BackgroundDecor';
 import ServerWakeup from '@/components/ServerWakeup';
+import ViewportFix from '@/components/ViewportFix';
+import { PullToRefreshProvider } from '@/components/PullToRefresh';
 
 export const metadata = {
   title: 'MASAR',
@@ -28,6 +30,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <ServerWakeup />
+        <ViewportFix />
         <DesktopBlock />
         <div
           className="sm:hidden bg-grid"
@@ -40,9 +43,9 @@ export default function RootLayout({ children }) {
           }}
         >
           <BackgroundDecor />
-          <main style={{ position: 'relative', zIndex: 1, flex: 1, overflowY: 'auto' }}>
+          <PullToRefreshProvider>
             {children}
-          </main>
+          </PullToRefreshProvider>
           <BottomNav />
         </div>
       </body>

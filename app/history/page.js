@@ -1,11 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useCounter } from '@/hooks/useCounter';
 import BottomSheet from '@/components/BottomSheet';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import PageTransition from '@/components/PageTransition';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const fade = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.055 } } };
@@ -17,15 +19,17 @@ export default function HistoryPage() {
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
 
-  useEffect(() => {
-    api.sessions.list().then(setSessions).catch(console.error).finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(() => api.sessions.list().then(setSessions), []);
+
+  useEffect(() => { load().catch(console.error).finally(() => setLoading(false)); }, [load]);
+  usePullToRefresh(load);
 
   async function del(id) {
     setDeleting(id);
     try { await api.sessions.remove(id); setSessions(p => p.filter(s => s._id !== id)); setSelected(null); }
-    finally { setDeleting(null); }
+    finally { setDeleting(null); setConfirmDel(false); }
   }
 
   const totalCount = useCounter(sessions.length);
@@ -107,7 +111,7 @@ export default function HistoryPage() {
       {/* Session Detail Sheet */}
       <BottomSheet
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={() => { setSelected(null); setConfirmDel(false); }}
         title={selected ? format(new Date(selected.date), 'EEE, MMM d · yyyy') : ''}
       >
         {selected && (
@@ -151,7 +155,7 @@ export default function HistoryPage() {
 
             <motion.button
               whileTap={{ scale: 0.97 }}
-              onClick={() => del(selected._id)}
+              onClick={() => setConfirmDel(true)}
               disabled={deleting === selected._id}
               className="btn btn-danger w-full py-4 mt-2"
               style={{ opacity: deleting === selected._id ? 0.4 : 1 }}
@@ -161,6 +165,15 @@ export default function HistoryPage() {
           </div>
         )}
       </BottomSheet>
+
+      <ConfirmDialog
+        open={confirmDel}
+        title="Delete Session"
+        message="This session and its logged sets will be permanently removed."
+        loading={deleting === selected?._id}
+        onConfirm={() => del(selected._id)}
+        onCancel={() => setConfirmDel(false)}
+      />
     </PageTransition>
   );
 }
