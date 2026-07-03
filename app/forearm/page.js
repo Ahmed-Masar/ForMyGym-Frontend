@@ -7,12 +7,12 @@ import DatePicker from '@/components/DatePicker';
 import BottomSheet from '@/components/BottomSheet';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import PageTransition from '@/components/PageTransition';
+import SetEditor, { newSet, toPayload, cloneLastSet } from '@/components/SetEditor';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const EXERCISES = ['Extensors', 'Flexors', 'Brachioradialis'];
 
-const emptySet = () => ({ reps: '', weight: '' });
-const emptyExercises = () => EXERCISES.map((name) => ({ name, sets: [emptySet()] }));
+const emptyExercises = () => EXERCISES.map((name) => ({ name, sets: [newSet()] }));
 const hasSets = (log) => log.exercises.some((e) => e.sets.length > 0);
 
 export default function ForearmPage() {
@@ -27,6 +27,7 @@ export default function ForearmPage() {
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
   const [saved, setSaved]     = useState(false);
+  const [cardStatus, setCardStatus] = useState({}); // { [exercise name]: 'saving' | 'saved' }
 
   const refreshLogs = useCallback(() => Promise.all([
     api.forearm.list().then((all) => setLogs(all.filter(hasSets))),
@@ -37,8 +38,8 @@ export default function ForearmPage() {
     if (!log) { setExercises(emptyExercises()); return; }
     setExercises(EXERCISES.map((name) => {
       const found = log.exercises.find((e) => e.name === name);
-      const sets = found?.sets.map((s) => ({ reps: String(s.reps), weight: String(s.weight) })) || [];
-      return { name, sets: sets.length ? sets : [emptySet()] };
+      const sets = found?.sets.map((s) => newSet(String(s.reps), String(s.weight))) || [];
+      return { name, sets: sets.length ? sets : [newSet()] };
     }));
   }), []);
 
@@ -52,36 +53,64 @@ export default function ForearmPage() {
   useEffect(() => {
     setLoading(true);
     setSaved(false);
+    setCardStatus({});
     fetchDate(date)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [date]);
 
-  const addSet    = (name) => setExercises((p) => p.map((e) => e.name === name ? { ...e, sets: [...e.sets, emptySet()] } : e));
-  const removeSet = (name, i) => setExercises((p) => p.map((e) => {
+  // Editing a card invalidates its "Saved ✓" badge
+  const markDirty = (name) => setCardStatus((s) => {
+    if (!(name in s)) return s;
+    const next = { ...s };
+    delete next[name];
+    return next;
+  });
+
+  const addSet    = (name) => { markDirty(name); setExercises((p) => p.map((e) => e.name === name ? { ...e, sets: [...e.sets, cloneLastSet(e.sets)] } : e)); };
+  const removeSet = (name, i) => { markDirty(name); setExercises((p) => p.map((e) => {
     if (e.name !== name) return e;
     const sets = e.sets.filter((_, j) => j !== i);
-    return { ...e, sets: sets.length ? sets : [emptySet()] };
-  }));
-  const updSet = (name, i, f, v) => setExercises((p) => p.map((e) =>
+    return { ...e, sets: sets.length ? sets : [newSet()] };
+  })); };
+  const updSet = (name, i, f, v) => { markDirty(name); setExercises((p) => p.map((e) =>
     e.name !== name ? e : { ...e, sets: e.sets.map((set, j) => j === i ? { ...set, [f]: v } : set) }
-  ));
+  )); };
 
-  const save = useCallback(async () => {
+  // Saves the given exercises (or all of them) into the same day log — the
+  // server merges per exercise name, so saving one card at a time still keeps
+  // the whole day as a single log.
+  const saveExercises = useCallback(async (names) => {
+    document.activeElement?.blur?.();
     setError('');
-    setSaving(true);
+    const targets = names || EXERCISES;
+    if (names) setCardStatus((s) => ({ ...s, ...Object.fromEntries(names.map((n) => [n, 'saving'])) }));
+    else { setSaving(true); setSaved(false); }
     try {
       await api.forearm.save({
         date: new Date(date).toISOString(),
         exercises: exercises
-          .map((e) => ({ name: e.name, sets: e.sets.filter((s) => s.reps && s.weight).map((s) => ({ reps: +s.reps, weight: +s.weight })) }))
-          .filter((e) => e.sets.length),
+          .filter((e) => targets.includes(e.name))
+          .map((e) => ({ name: e.name, sets: toPayload(e.sets) })),
       });
-      setSaved(true);
+      setCardStatus((s) => ({ ...s, ...Object.fromEntries(targets.map((n) => [n, 'saved'])) }));
+      if (!names) setSaved(true);
       refreshLogs();
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
+    } catch (err) {
+      setError(err.message);
+      if (names) setCardStatus((s) => { const next = { ...s }; names.forEach((n) => delete next[n]); return next; });
+    } finally { if (!names) setSaving(false); }
   }, [date, exercises, refreshLogs]);
+
+  const save = useCallback(() => saveExercises(null), [saveExercises]);
+
+  const totalSets = exercises.reduce((n, e) => n + toPayload(e.sets).length, 0);
+
+  function editLog(log) {
+    setDate(format(new Date(log.date), 'yyyy-MM-dd'));
+    setSelectedLog(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   async function deleteLog(id) {
     setDeleting(id);
@@ -91,6 +120,7 @@ export default function ForearmPage() {
       refreshLogs();
       if (selectedLog && isSameDay(new Date(selectedLog.date), new Date(date))) {
         setExercises(emptyExercises());
+        setCardStatus({});
       }
     } finally { setDeleting(null); setConfirmDel(false); }
   }
@@ -146,64 +176,31 @@ export default function ForearmPage() {
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                 className="card overflow-hidden"
               >
-                <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                <div className="px-4 pt-3.5 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   <span className="font-bold text-white" style={{ fontSize: 15 }}>{ex.name}</span>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => saveExercises([ex.name])}
+                    disabled={cardStatus[ex.name] === 'saving'}
+                    className="btn btn-ghost px-3.5 py-2"
+                    style={{
+                      fontSize: 10,
+                      ...(cardStatus[ex.name] === 'saved'
+                        ? { color: 'rgba(120,255,150,0.7)', borderColor: 'rgba(120,255,150,0.22)' }
+                        : {}),
+                    }}
+                  >
+                    {cardStatus[ex.name] === 'saving' ? '...' : cardStatus[ex.name] === 'saved' ? 'Saved ✓' : 'Save'}
+                  </motion.button>
                 </div>
 
-                <div className="px-4 pt-3 pb-4 flex flex-col gap-2.5">
-                  <div className="grid grid-cols-11 gap-2">
-                    <span className="col-span-1" />
-                    <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>REPS</span>
-                    <span className="col-span-1" />
-                    <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>KG</span>
-                    <span className="col-span-1" />
-                  </div>
-
-                  <AnimatePresence>
-                    {ex.sets.map((set, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 8 }}
-                        transition={{ duration: 0.25 }}
-                        className="grid grid-cols-11 gap-2 items-center"
-                      >
-                        <span className="col-span-1 num text-center" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
-                          {i + 1}
-                        </span>
-                        <input
-                          type="number" inputMode="numeric" placeholder="10"
-                          value={set.reps}
-                          onChange={(e) => updSet(ex.name, i, 'reps', e.target.value)}
-                          className="col-span-4 inp text-center num"
-                          style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
-                        />
-                        <span className="col-span-1 text-center" style={{ color: 'rgba(255,255,255,0.15)', fontSize: 14 }}>×</span>
-                        <input
-                          type="number" inputMode="decimal" placeholder="0"
-                          value={set.weight}
-                          onChange={(e) => updSet(ex.name, i, 'weight', e.target.value)}
-                          step="0.5"
-                          className="col-span-4 inp text-center num"
-                          style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
-                        />
-                        <button
-                          onClick={() => removeSet(ex.name, i)}
-                          className="col-span-1 text-center"
-                          style={{ color: 'rgba(255,255,255,0.18)', fontSize: 20, lineHeight: 1 }}
-                        >×</button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-
-                  <motion.button
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => addSet(ex.name)}
-                    className="btn btn-ghost w-full py-3 mt-1"
-                  >
-                    + Add Set
-                  </motion.button>
+                <div className="px-4 pt-3 pb-4">
+                  <SetEditor
+                    sets={ex.sets}
+                    onAdd={() => addSet(ex.name)}
+                    onRemove={(i) => removeSet(ex.name, i)}
+                    onUpdate={(i, f, v) => updSet(ex.name, i, f, v)}
+                  />
                 </div>
               </motion.div>
             ))}
@@ -231,7 +228,7 @@ export default function ForearmPage() {
             className="btn btn-primary w-full py-4"
             style={{ fontSize: 14, opacity: saving || loading ? 0.32 : 1 }}
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : totalSets ? `Save Day · ${totalSets} ${totalSets === 1 ? 'Set' : 'Sets'}` : 'Save Day'}
           </motion.button>
 
           {/* History */}
@@ -308,15 +305,24 @@ export default function ForearmPage() {
               </div>
             ))}
 
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setConfirmDel(true)}
-              disabled={deleting === selectedLog._id}
-              className="btn btn-danger w-full py-4 mt-2"
-              style={{ opacity: deleting === selectedLog._id ? 0.4 : 1 }}
-            >
-              {deleting === selectedLog._id ? 'Deleting...' : 'Delete Day'}
-            </motion.button>
+            <div className="flex gap-2.5 mt-2">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => editLog(selectedLog)}
+                className="btn btn-primary flex-1 py-4"
+              >
+                Edit Day
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setConfirmDel(true)}
+                disabled={deleting === selectedLog._id}
+                className="btn btn-danger flex-1 py-4"
+                style={{ opacity: deleting === selectedLog._id ? 0.4 : 1 }}
+              >
+                {deleting === selectedLog._id ? 'Deleting...' : 'Delete Day'}
+              </motion.button>
+            </div>
           </div>
         )}
       </BottomSheet>

@@ -3,60 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '@/components/PageTransition';
-
-const PROGRAM = [
-  {
-    day: 1,
-    label: 'Chest, Biceps & Forearms',
-    exercises: [
-      'Flat Hammer Chest Press',
-      'Incline Hammer Chest Press',
-      'Machine Decline Chest Press',
-      'Pec Deck Machine',
-      'Larry Scott Curl',
-      'Incline Dumbbell Curl',
-      'Hammer Curl',
-      'Wrist Curls',
-    ],
-  },
-  {
-    day: 2,
-    label: 'Back & Triceps',
-    exercises: [
-      'Lat Pulldown',
-      'Close-Grip Seated Cable Row',
-      'T-Bar Row',
-      'Back Extension',
-      'Triceps Pushdown Machine',
-      'Triceps Extension Machine',
-      'Low Pulley Overhead Extension',
-      'Triceps Rope Pushdown',
-    ],
-  },
-  {
-    day: 3,
-    label: 'Shoulders, Traps & Forearms',
-    exercises: [
-      'Machine Shoulder Press',
-      'Dumbbell Lateral Raise',
-      'Cable Lateral Raise',
-      'Reverse Pec Deck Fly',
-      'Dumbbell Shrugs',
-      'Reverse Barbell Curl',
-    ],
-  },
-  {
-    day: 4,
-    label: 'Legs',
-    exercises: [
-      'Leg Press',
-      'Hip Adductor Machine',
-      'Hip Abductor Machine',
-      'Lying Leg Curl',
-      'Calf Raises',
-    ],
-  },
-];
+import { PROGRAM } from '@/lib/program';
 
 const itemFade = { hidden: { opacity: 0, x: -10 }, show: { opacity: 1, x: 0 } };
 const itemList = { hidden: {}, show: { transition: { staggerChildren: 0.055 } } };

@@ -42,7 +42,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
             }}
           />
 
-          {/* Sheet — exactly 52dvh */}
+          {/* Sheet — hugs its content, scrolls past 76dvh */}
           <motion.div
             key="sheet"
             initial={{ y: '100%' }}
@@ -53,7 +53,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
               zIndex: 9999,
-              height: '52dvh',
+              maxHeight: '76dvh',
               background: '#111111',
               borderTop: '1px solid rgba(255,255,255,0.1)',
               borderRadius: '24px 24px 0 0',
@@ -92,7 +92,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
             )}
 
             {/* Scrollable content */}
-            <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
               {children}
             </div>
           </motion.div>

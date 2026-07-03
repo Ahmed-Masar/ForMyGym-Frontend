@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useCounter } from '@/hooks/useCounter';
 import ExerciseChart from '@/components/ExerciseChart';
@@ -11,13 +11,13 @@ import PageTransition from '@/components/PageTransition';
 import BottomSheet from '@/components/BottomSheet';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import DatePicker from '@/components/DatePicker';
+import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/components/SetEditor';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const fade = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.065 } } };
 
 const vol = s => s.exercises.reduce((t, ex) => t + ex.sets.reduce((a, set) => a + set.reps * set.weight, 0), 0);
-const emptySet = () => ({ reps: '', weight: '' });
 
 export default function ExerciseDetailPage() {
   const { id } = useParams();
@@ -30,7 +30,7 @@ export default function ExerciseDetailPage() {
 
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [date, setDate]   = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [sets, setSets]   = useState([emptySet()]);
+  const [sets, setSets]   = useState([newSet()]);
   const [saving, setSaving] = useState(false);
   const [logError, setLogError] = useState('');
   const [saved, setSaved]   = useState(false);
@@ -58,24 +58,28 @@ export default function ExerciseDetailPage() {
     }
   }
 
-  const addSet    = () => setSets(p => [...p, emptySet()]);
-  const removeSet = (i) => setSets(p => { const next = p.filter((_, j) => j !== i); return next.length ? next : [emptySet()]; });
+  const addSet    = () => setSets(p => [...p, cloneLastSet(p)]);
+  const removeSet = (i) => setSets(p => { const next = p.filter((_, j) => j !== i); return next.length ? next : [newSet()]; });
   const updSet    = (i, f, v) => setSets(p => p.map((s, j) => j === i ? { ...s, [f]: v } : s));
 
   async function logSets() {
-    const filtered = sets.filter(s => s.reps && s.weight).map(s => ({ reps: +s.reps, weight: +s.weight }));
-    if (!filtered.length) { setLogError('Add at least one set.'); return; }
+    document.activeElement?.blur?.();
+    const payload = toPayload(sets);
+    if (!payload.length) { setLogError('Add at least one set — reps is required.'); return; }
     setLogError('');
     setSaving(true);
     setSaved(false);
     try {
-      await api.sessions.log({ date: new Date(date).toISOString(), exerciseId: id, sets: filtered });
+      await api.sessions.log({ date: new Date(date).toISOString(), exerciseId: id, sets: payload });
       setSaved(true);
       load();
-      setTimeout(() => { setLogSheetOpen(false); setSets([emptySet()]); }, 600);
+      setTimeout(() => { setLogSheetOpen(false); setSets([newSet()]); }, 600);
     } catch (err) { setLogError(err.message); }
     finally { setSaving(false); }
   }
+
+  const validSetCount = toPayload(sets).length;
+  const lastLog = progression.length ? progression[progression.length - 1] : null;
 
   const pr       = progression.length ? Math.max(...progression.map(p => p.maxWeight)) : 0;
   const totalVol = progression.reduce((a, p) => a + p.volume, 0);
@@ -255,55 +259,41 @@ export default function ExerciseDetailPage() {
         <div className="px-5 pt-4 pb-2 flex flex-col gap-3">
           <DatePicker value={date} onChange={setDate} />
 
-          <div className="grid grid-cols-11 gap-2 mt-1">
-            <span className="col-span-1" />
-            <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>REPS</span>
-            <span className="col-span-1" />
-            <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>KG</span>
-            <span className="col-span-1" />
-          </div>
-
-          <AnimatePresence>
-            {sets.map((set, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 8 }}
-                transition={{ duration: 0.2 }}
-                className="grid grid-cols-11 gap-2 items-center"
-              >
-                <span className="col-span-1 num text-center" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
-                  {i + 1}
+          {lastLog && (
+            <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              <span className="label shrink-0" style={{ fontSize: 8 }}>
+                LAST · {format(new Date(lastLog.date), 'MMM d')}
+              </span>
+              {lastLog.sets.map((s, si) => (
+                <span key={si} className="num shrink-0" style={{
+                  fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 999,
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  color: 'rgba(255,255,255,0.45)',
+                }}>
+                  {s.reps}×{s.weight}
                 </span>
-                <input
-                  type="number" inputMode="numeric" placeholder="10"
-                  value={set.reps}
-                  onChange={e => updSet(i, 'reps', e.target.value)}
-                  className="col-span-4 inp text-center num"
-                  style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
-                />
-                <span className="col-span-1 text-center" style={{ color: 'rgba(255,255,255,0.15)', fontSize: 14 }}>×</span>
-                <input
-                  type="number" inputMode="decimal" placeholder="60"
-                  value={set.weight}
-                  onChange={e => updSet(i, 'weight', e.target.value)}
-                  step="0.5"
-                  className="col-span-4 inp text-center num"
-                  style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
-                />
-                <button
-                  onClick={() => removeSet(i)}
-                  className="col-span-1 text-center"
-                  style={{ color: 'rgba(255,255,255,0.18)', fontSize: 20, lineHeight: 1 }}
-                >×</button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+              ))}
+              <button
+                type="button"
+                onClick={() => setSets(fromLogged(lastLog.sets))}
+                className="chip shrink-0"
+                style={{ fontSize: 10, padding: '4px 11px', fontWeight: 700 }}
+              >
+                USE LAST
+              </button>
+            </div>
+          )}
 
-          <motion.button whileTap={{ scale: 0.96 }} onClick={addSet} className="btn btn-ghost w-full py-3 mt-1">
-            + Add Set
-          </motion.button>
+          <div className="mt-1">
+            <SetEditor
+              sets={sets}
+              onAdd={addSet}
+              onRemove={removeSet}
+              onUpdate={updSet}
+              weightPlaceholder={lastLog ? String(lastLog.maxWeight) : '60'}
+            />
+          </div>
 
           {logError && (
             <p style={{ fontSize: 12, color: 'rgba(255,80,80,0.75)' }}>{logError}</p>
@@ -319,7 +309,7 @@ export default function ExerciseDetailPage() {
             className="btn btn-primary w-full py-4 mt-1"
             style={{ fontSize: 14, opacity: saving ? 0.32 : 1 }}
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : validSetCount ? `Save · ${validSetCount} ${validSetCount === 1 ? 'Set' : 'Sets'}` : 'Save'}
           </motion.button>
 
           <div className="h-2" />

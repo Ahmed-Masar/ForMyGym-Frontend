@@ -15,6 +15,19 @@ const nav = [
     ),
   },
   {
+    href: '/workout',
+    label: 'Workout',
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="9" width="3.4" height="6" rx="1" fill={active ? 'currentColor' : 'none'}/>
+        <rect x="18.6" y="9" width="3.4" height="6" rx="1" fill={active ? 'currentColor' : 'none'}/>
+        <rect x="5.4" y="6.5" width="3.2" height="11" rx="1" fill={active ? 'currentColor' : 'none'}/>
+        <rect x="15.4" y="6.5" width="3.2" height="11" rx="1" fill={active ? 'currentColor' : 'none'}/>
+        <line x1="8.6" y1="12" x2="15.4" y2="12"/>
+      </svg>
+    ),
+  },
+  {
     href: '/calendar',
     label: 'Calendar',
     icon: (active) => (
@@ -40,18 +53,6 @@ const nav = [
     icon: (active) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 6h16M4 12h16M4 18h10"/>
-      </svg>
-    ),
-  },
-  {
-    href: '/program',
-    label: 'Program',
-    icon: (active) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="8" y="2" width="8" height="4" rx="1.2" fill={active ? 'currentColor' : 'none'} stroke="currentColor"/>
-        <path d="M5 3.5H4a2 2 0 00-2 2v14a2 2 0 002 2h16a2 2 0 002-2v-14a2 2 0 00-2-2h-1"/>
-        <line x1="8" y1="11" x2="16" y2="11"/>
-        <line x1="8" y1="15" x2="13" y2="15"/>
       </svg>
     ),
   },

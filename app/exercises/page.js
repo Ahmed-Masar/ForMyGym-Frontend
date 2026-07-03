@@ -8,23 +8,20 @@ import BottomSheet from '@/components/BottomSheet';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import DatePicker from '@/components/DatePicker';
 import PageTransition from '@/components/PageTransition';
+import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/components/SetEditor';
 import { useCounter } from '@/hooks/useCounter';
 import { usePullToRefresh } from '@/components/PullToRefresh';
-
-const emptySet = () => ({ reps: '', weight: '' });
+import { PROGRAM, getLastLog } from '@/lib/program';
 
 const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
-const DAYS = [
-  { id: 1, label: 'Chest & Biceps', categories: ['Chest', 'Biceps'] },
-  { id: 2, label: 'Back & Triceps', categories: ['Back', 'Triceps'] },
-  { id: 3, label: 'Shoulders', categories: ['Shoulders'] },
-  { id: 4, label: 'Legs', categories: ['Legs'] },
-];
+// Day filters follow the program split — one source of truth in lib/program.js.
+const DAYS = PROGRAM.map((d) => ({ id: d.day, label: d.short, categories: d.categories }));
 const fade = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
 
 export default function ExercisesPage() {
   const [exercises, setExercises] = useState([]);
+  const [sessions, setSessions]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing]     = useState(null);
@@ -36,12 +33,15 @@ export default function ExercisesPage() {
 
   const [logEx, setLogEx]         = useState(null);
   const [logDate, setLogDate]     = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [logSets, setLogSets]     = useState([emptySet()]);
+  const [logSets, setLogSets]     = useState([newSet()]);
   const [logSaving, setLogSaving] = useState(false);
   const [logError, setLogError]   = useState('');
   const [logSaved, setLogSaved]   = useState(false);
 
-  const load = useCallback(() => api.exercises.list().then(setExercises), []);
+  const load = useCallback(() => Promise.all([
+    api.exercises.list().then(setExercises),
+    api.sessions.list().then(setSessions).catch(() => {}),
+  ]), []);
 
   useEffect(() => { load().catch(console.error).finally(() => setLoading(false)); }, [load]);
   usePullToRefresh(load);
@@ -77,27 +77,31 @@ export default function ExercisesPage() {
   function openLog(ex) {
     setLogEx(ex);
     setLogDate(format(new Date(), 'yyyy-MM-dd'));
-    setLogSets([emptySet()]);
+    setLogSets([newSet()]);
     setLogError('');
     setLogSaved(false);
   }
 
-  const addLogSet    = () => setLogSets(p => [...p, emptySet()]);
-  const removeLogSet = (i) => setLogSets(p => { const n = p.filter((_, j) => j !== i); return n.length ? n : [emptySet()]; });
+  const addLogSet    = () => setLogSets(p => [...p, cloneLastSet(p)]);
+  const removeLogSet = (i) => setLogSets(p => { const n = p.filter((_, j) => j !== i); return n.length ? n : [newSet()]; });
   const updLogSet     = (i, f, v) => setLogSets(p => p.map((s, j) => j === i ? { ...s, [f]: v } : s));
 
   async function saveLog() {
-    const filtered = logSets.filter(s => s.reps && s.weight).map(s => ({ reps: +s.reps, weight: +s.weight }));
-    if (!filtered.length) { setLogError('Add at least one set.'); return; }
+    document.activeElement?.blur?.();
+    const payload = toPayload(logSets);
+    if (!payload.length) { setLogError('Add at least one set — reps is required.'); return; }
     setLogError('');
     setLogSaving(true);
     try {
-      await api.sessions.log({ date: new Date(logDate).toISOString(), exerciseId: logEx._id, sets: filtered });
+      await api.sessions.log({ date: new Date(logDate).toISOString(), exerciseId: logEx._id, sets: payload });
+      api.sessions.list().then(setSessions).catch(() => {});
       setLogSaved(true);
       setTimeout(() => setLogEx(null), 600);
     } catch (err) { setLogError(err.message); }
     finally { setLogSaving(false); }
   }
+
+  const logLast = logEx ? getLastLog(sessions, logEx._id) : null;
 
   const activeCategories = activeDay ? DAYS.find(d => d.id === activeDay).categories : CATEGORIES;
   const grouped = CATEGORIES.filter(cat => activeCategories.includes(cat)).reduce((acc, cat) => {
@@ -105,6 +109,8 @@ export default function ExercisesPage() {
     if (list.length) acc[cat] = list;
     return acc;
   }, {});
+
+  const validLogSets = toPayload(logSets).length;
 
   if (loading) return <Skeleton />;
 
@@ -209,15 +215,6 @@ export default function ExercisesPage() {
                             className="btn btn-primary px-3.5 py-2" style={{ fontSize: 11 }}>Log</motion.button>
                           <motion.button whileTap={{ scale: 0.95 }} onClick={() => openEdit(ex)}
                             className="btn btn-ghost px-3.5 py-2" style={{ fontSize: 11 }}>Edit</motion.button>
-                          <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => setConfirming(ex)}
-                            disabled={deleting === ex._id}
-                            className="btn btn-danger px-3.5 py-2"
-                            style={{ fontSize: 11, opacity: deleting === ex._id ? 0.5 : 1 }}
-                          >
-                            {deleting === ex._id ? '…' : '×'}
-                          </motion.button>
                         </div>
                       </motion.div>
                     ))}
@@ -264,6 +261,17 @@ export default function ExercisesPage() {
           >
             {saving ? '...' : editing ? 'Save Changes' : 'Add Exercise'}
           </motion.button>
+
+          {editing && (
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              type="button"
+              onClick={() => { setSheetOpen(false); setConfirming(editing); }}
+              className="btn btn-danger w-full py-3.5"
+            >
+              Delete Exercise
+            </motion.button>
+          )}
         </form>
       </BottomSheet>
 
@@ -286,55 +294,41 @@ export default function ExercisesPage() {
           <div className="px-5 pt-4 pb-2 flex flex-col gap-3">
             <DatePicker value={logDate} onChange={setLogDate} />
 
-            <div className="grid grid-cols-11 gap-2 mt-1">
-              <span className="col-span-1" />
-              <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>REPS</span>
-              <span className="col-span-1" />
-              <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>KG</span>
-              <span className="col-span-1" />
-            </div>
-
-            <AnimatePresence>
-              {logSets.map((set, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 8 }}
-                  transition={{ duration: 0.2 }}
-                  className="grid grid-cols-11 gap-2 items-center"
-                >
-                  <span className="col-span-1 num text-center" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
-                    {i + 1}
+            {logLast && (
+              <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                <span className="label shrink-0" style={{ fontSize: 8 }}>
+                  LAST · {format(new Date(logLast.date), 'MMM d')}
+                </span>
+                {logLast.sets.map((s, si) => (
+                  <span key={si} className="num shrink-0" style={{
+                    fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 999,
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    color: 'rgba(255,255,255,0.45)',
+                  }}>
+                    {s.reps}×{s.weight}
                   </span>
-                  <input
-                    type="number" inputMode="numeric" placeholder="10"
-                    value={set.reps}
-                    onChange={e => updLogSet(i, 'reps', e.target.value)}
-                    className="col-span-4 inp text-center num"
-                    style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
-                  />
-                  <span className="col-span-1 text-center" style={{ color: 'rgba(255,255,255,0.15)', fontSize: 14 }}>×</span>
-                  <input
-                    type="number" inputMode="decimal" placeholder="60"
-                    value={set.weight}
-                    onChange={e => updLogSet(i, 'weight', e.target.value)}
-                    step="0.5"
-                    className="col-span-4 inp text-center num"
-                    style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
-                  />
-                  <button
-                    onClick={() => removeLogSet(i)}
-                    className="col-span-1 text-center"
-                    style={{ color: 'rgba(255,255,255,0.18)', fontSize: 20, lineHeight: 1 }}
-                  >×</button>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLogSets(fromLogged(logLast.sets))}
+                  className="chip shrink-0"
+                  style={{ fontSize: 10, padding: '4px 11px', fontWeight: 700 }}
+                >
+                  USE LAST
+                </button>
+              </div>
+            )}
 
-            <motion.button whileTap={{ scale: 0.96 }} onClick={addLogSet} className="btn btn-ghost w-full py-3 mt-1">
-              + Add Set
-            </motion.button>
+            <div className="mt-1">
+              <SetEditor
+                sets={logSets}
+                onAdd={addLogSet}
+                onRemove={removeLogSet}
+                onUpdate={updLogSet}
+                weightPlaceholder={logLast ? String(Math.max(...logLast.sets.map((s) => s.weight))) : '60'}
+              />
+            </div>
 
             {logError && (
               <p style={{ fontSize: 12, color: 'rgba(255,80,80,0.75)' }}>{logError}</p>
@@ -350,7 +344,7 @@ export default function ExercisesPage() {
               className="btn btn-primary w-full py-4 mt-1"
               style={{ fontSize: 14, opacity: logSaving ? 0.32 : 1 }}
             >
-              {logSaving ? 'Saving...' : 'Save'}
+              {logSaving ? 'Saving...' : validLogSets ? `Save · ${validLogSets} ${validLogSets === 1 ? 'Set' : 'Sets'}` : 'Save'}
             </motion.button>
 
             <div className="h-2" />
