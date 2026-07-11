@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useCounter } from '@/hooks/useCounter';
+import { bestE1RM } from '@/lib/progression';
 import ExerciseChart from '@/components/ExerciseChart';
 import PageTransition from '@/components/PageTransition';
 import BottomSheet from '@/components/BottomSheet';
@@ -83,8 +84,13 @@ export default function ExerciseDetailPage() {
 
   const pr       = progression.length ? Math.max(...progression.map(p => p.maxWeight)) : 0;
   const totalVol = progression.reduce((a, p) => a + p.volume, 0);
+  const est1RM   = progression.length ? Math.round(Math.max(...progression.map(p => bestE1RM(p.sets)))) : 0;
+
+  // Estimated 1RM per session for the chart's strength-curve toggle.
+  const chartData = progression.map(p => ({ ...p, e1rm: Math.round(bestE1RM(p.sets)) }));
 
   const prCount    = useCounter(pr);
+  const oneRmCount = useCounter(est1RM);
   const sessCount  = useCounter(progression.length);
   const volCount   = useCounter(Math.floor(totalVol >= 1000 ? totalVol / 1000 : totalVol));
 
@@ -156,13 +162,14 @@ export default function ExerciseDetailPage() {
             {/* Stats */}
             <motion.div
               variants={list} initial="hidden" animate="show"
-              className="grid grid-cols-3 gap-2.5"
+              className="grid grid-cols-2 gap-2.5"
             >
               {[
                 { label: 'PR', value: prCount, suffix: 'kg', badge: true },
+                { label: 'Est. 1RM', value: oneRmCount, suffix: 'kg', accent: true },
                 { label: 'Sessions', value: sessCount, suffix: null },
                 { label: 'Volume', value: volCount, suffix: totalVol >= 1000 ? 't' : 'kg' },
-              ].map(({ label, value, suffix, badge }) => (
+              ].map(({ label, value, suffix, badge, accent }) => (
                 <motion.div
                   key={label}
                   variants={fade}
@@ -172,8 +179,9 @@ export default function ExerciseDetailPage() {
                   <div className="flex items-center justify-between">
                     <span className="label" style={{ fontSize: 8 }}>{label.toUpperCase()}</span>
                     {badge && <span className="pr-badge">PR</span>}
+                    {accent && <span className="label" style={{ fontSize: 8, color: 'var(--accent)' }}>EST</span>}
                   </div>
-                  <p className="num font-black text-white" style={{ fontSize: '1.9rem', lineHeight: 1 }}>
+                  <p className="num font-black" style={{ fontSize: '1.9rem', lineHeight: 1, color: accent ? 'var(--accent)' : '#fff' }}>
                     {value}
                     {suffix && (
                       <span className="font-normal ml-0.5" style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)' }}>
@@ -194,7 +202,7 @@ export default function ExerciseDetailPage() {
                 className="card p-4"
               >
                 <p className="label mb-4">Progression</p>
-                <ExerciseChart data={progression} />
+                <ExerciseChart data={chartData} />
               </motion.div>
             )}
 

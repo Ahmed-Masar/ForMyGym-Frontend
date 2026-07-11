@@ -27,6 +27,11 @@
   --text:         #ffffff;
   --text-2:       #888888;
   --text-3:       #303030;
+  /* Single restrained accent — the same green already used for "saved".
+     Reserved for positive signal only: PRs, completion, ready-to-progress. */
+  --accent:       #6ff59a;
+  --accent-soft:  rgba(111,245,154,0.14);
+  --accent-line:  rgba(111,245,154,0.35);
   --r-card:       20px;
   --r-input:      14px;
   --r-pill:       999px;
@@ -144,6 +149,30 @@ input[type='number'] { -moz-appearance: textfield; }
   font-size: 8px; font-weight: 800;
   letter-spacing: 0.18em;
   padding: 2px 6px; border-radius: 4px;
+}
+
+/* ─── Ready-to-progress badge (accent) ─── */
+.progress-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  font-size: 8px; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ─── Cue pill — a persistent form reminder while logging ─── */
+.cue-pill {
+  display: flex; align-items: flex-start; gap: 7px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-left: 2px solid var(--accent-line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 12px; line-height: 1.45;
+  color: rgba(255,255,255,0.62);
 }
 
 /* ─── Labels ─── */

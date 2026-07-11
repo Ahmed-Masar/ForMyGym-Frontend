@@ -12,6 +12,7 @@ import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/compon
 import { useCounter } from '@/hooks/useCounter';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { PROGRAM, getLastLog } from '@/lib/program';
+import { defaultTarget, targetFor } from '@/lib/progression';
 
 const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
 // Day filters follow the program split — one source of truth in lib/program.js.
@@ -25,7 +26,7 @@ export default function ExercisesPage() {
   const [loading, setLoading]     = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing]     = useState(null);
-  const [form, setForm]           = useState({ name: '', category: 'Other' });
+  const [form, setForm]           = useState({ name: '', category: 'Other', targetReps: '', targetSets: '', requiredSessions: '', cue: '' });
   const [saving, setSaving]       = useState(false);
   const [deleting, setDeleting]   = useState(null);
   const [confirming, setConfirming] = useState(null);
@@ -48,19 +49,47 @@ export default function ExercisesPage() {
 
   const count = useCounter(exercises.length);
 
-  function openAdd()  { setEditing(null);  setForm({ name: '', category: 'Other' }); setSheetOpen(true); }
-  function openEdit(ex) { setEditing(ex); setForm({ name: ex.name, category: ex.category }); setSheetOpen(true); }
+  function openAdd() {
+    setEditing(null);
+    const d = defaultTarget('Other');
+    setForm({ name: '', category: 'Other', targetReps: String(d.reps), targetSets: String(d.sets), requiredSessions: String(d.sessions), cue: '' });
+    setSheetOpen(true);
+  }
+  function openEdit(ex) {
+    setEditing(ex);
+    const t = targetFor(ex); // stored value, or the smart default for its category
+    setForm({ name: ex.name, category: ex.category, targetReps: String(t.reps), targetSets: String(t.sets), requiredSessions: String(t.sessions), cue: ex.cue ?? '' });
+    setSheetOpen(true);
+  }
+
+  // Switching category on a *new* exercise pulls in that category's smart
+  // defaults; when editing, the user's own numbers are left untouched.
+  function onCategoryChange(category) {
+    setForm((f) => {
+      if (editing) return { ...f, category };
+      const d = defaultTarget(category);
+      return { ...f, category, targetReps: String(d.reps), targetSets: String(d.sets), requiredSessions: String(d.sessions) };
+    });
+  }
 
   async function submit(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
+    const payload = {
+      name: form.name.trim(),
+      category: form.category,
+      cue: form.cue.trim(),
+      targetReps:       +form.targetReps       || null,
+      targetSets:       +form.targetSets       || null,
+      requiredSessions: +form.requiredSessions || null,
+    };
     try {
       if (editing) {
-        const u = await api.exercises.update(editing._id, form);
+        const u = await api.exercises.update(editing._id, payload);
         setExercises(p => p.map(e => e._id === editing._id ? u : e));
       } else {
-        const c = await api.exercises.create(form);
+        const c = await api.exercises.create(payload);
         setExercises(p => [...p, c].sort((a, b) => a.name.localeCompare(b.name)));
       }
       setSheetOpen(false);
@@ -246,12 +275,50 @@ export default function ExercisesPage() {
           />
           <select
             value={form.category}
-            onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+            onChange={e => onCategoryChange(e.target.value)}
             className="inp"
             style={{ colorScheme: 'dark' }}
           >
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+
+          {/* Progression target — when this is hit for N sessions, the workout
+              screen flags the exercise as "ready to progress". */}
+          <div>
+            <p className="label mb-2.5">Progression Target</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { key: 'targetReps',       label: 'REPS' },
+                { key: 'targetSets',       label: 'SETS' },
+                { key: 'requiredSessions', label: 'SESSIONS' },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex flex-col gap-1.5">
+                  <input
+                    type="text" inputMode="numeric"
+                    value={form[key]}
+                    onFocus={(e) => e.target.select()}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
+                    className="inp text-center num"
+                    style={{ padding: '12px 6px', fontSize: 17 }}
+                  />
+                  <span className="label text-center" style={{ fontSize: 8 }}>{label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="label mt-2" style={{ fontSize: 8, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.2)', textTransform: 'none' }}>
+              e.g. hit 8 reps × 3 sets for 3 sessions → time to add weight.
+            </p>
+          </div>
+
+          {/* Form cue */}
+          <input
+            type="text"
+            placeholder="Form cue (optional) — e.g. keep elbows tucked"
+            value={form.cue}
+            onChange={e => setForm(f => ({ ...f, cue: e.target.value }))}
+            className="inp"
+          />
+
           <motion.button
             whileTap={{ scale: 0.97 }}
             type="submit"

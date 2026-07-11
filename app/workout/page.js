@@ -5,8 +5,10 @@ import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { PROGRAM, getUpNext, getLastLog } from '@/lib/program';
+import { progressStatus, targetFor } from '@/lib/progression';
 import DatePicker from '@/components/DatePicker';
 import PageTransition from '@/components/PageTransition';
+import PRCelebration from '@/components/PRCelebration';
 import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/components/SetEditor';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
@@ -16,8 +18,7 @@ const CATEGORY_ORDER = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs
 const norm = (s) => s.toLowerCase().trim();
 const dateKeyOf = (s) => new Date(s.date).toISOString().slice(0, 10);
 
-/* Order library exercises the way the program plans the day:
-   program-listed movements first (in plan order), the rest after. */
+
 function orderForDay(exercises, day) {
   const planNames = day.exercises.map(norm);
   const rank = (ex) => {
@@ -41,8 +42,10 @@ export default function WorkoutPage() {
   const [date, setDate]           = useState(format(new Date(), 'yyyy-MM-dd'));
   const [expanded, setExpanded]   = useState(null);
   const [drafts, setDrafts]       = useState({});   // { [exerciseId]: sets[] }
+  const [notes, setNotes]         = useState({});   // { [exerciseId]: string }
   const [status, setStatus]       = useState({});   // { [exerciseId]: 'saving' | 'saved' }
   const [errors, setErrors]       = useState({});   // { [exerciseId]: message }
+  const [pr, setPr]               = useState(null); // { name, weight } → celebration
 
   const load = useCallback(() =>
     Promise.all([api.exercises.list(), api.sessions.list()])
@@ -75,7 +78,13 @@ export default function WorkoutPage() {
     : 0;
 
   // Changing the date invalidates drafts/statuses — they belong to a day.
-  useEffect(() => { setDrafts({}); setStatus({}); setErrors({}); setExpanded(null); }, [date]);
+  useEffect(() => { setDrafts({}); setNotes({}); setStatus({}); setErrors({}); setExpanded(null); }, [date]);
+
+  // The saved note for this exercise on the current day, if any.
+  const loggedNote = useCallback((exId) => {
+    const entry = todaySession?.exercises.find((e) => (e.exercise?._id ?? e.exercise) === exId);
+    return entry?.note ?? '';
+  }, [todaySession]);
 
   function toggle(ex) {
     setExpanded((cur) => (cur === ex._id ? null : ex._id));
@@ -84,6 +93,7 @@ export default function WorkoutPage() {
       const logged = loggedSets(ex._id);
       return { ...d, [ex._id]: logged ? fromLogged(logged) : [newSet()] };
     });
+    setNotes((n) => (n[ex._id] !== undefined ? n : { ...n, [ex._id]: loggedNote(ex._id) }));
   }
 
   const markDirty = (exId) => {
@@ -101,6 +111,19 @@ export default function WorkoutPage() {
   })); };
 
   const useLast = (exId, last) => { markDirty(exId); setDrafts((d) => ({ ...d, [exId]: fromLogged(last.sets) })); };
+  const updNote = (exId, v) => { markDirty(exId); setNotes((n) => ({ ...n, [exId]: v })); };
+
+  // All-time heaviest weight logged for an exercise, ignoring the day being
+  // edited — the baseline a new PR must beat.
+  function prevMax(exId) {
+    let m = 0;
+    for (const s of sessions) {
+      if (dateKeyOf(s) === date) continue;
+      const entry = s.exercises.find((e) => (e.exercise?._id ?? e.exercise) === exId);
+      if (entry) for (const set of entry.sets) if (set.weight > m) m = set.weight;
+    }
+    return m;
+  }
 
   async function saveExercise(ex) {
     document.activeElement?.blur?.();
@@ -108,19 +131,31 @@ export default function WorkoutPage() {
     if (!payload.length) { setErrors((e) => ({ ...e, [ex._id]: 'Add at least one set — reps is required.' })); return; }
     setErrors((e) => ({ ...e, [ex._id]: undefined }));
     setStatus((s) => ({ ...s, [ex._id]: 'saving' }));
+
+    // A PR is a heavier top set than anything logged before (needs history —
+    // the very first log isn't a "record broken").
+    const before = prevMax(ex._id);
+    const topSet = Math.max(...payload.map((p) => p.weight));
+    const isPR = before > 0 && topSet > before;
+
+    const note = (notes[ex._id] || '').trim();
     try {
       let updated;
       if (todaySession) {
         // Replace this exercise's sets in the existing day session, so
-        // re-saving after an edit never duplicates sets.
-        const list = todaySession.exercises.map((e) => ({ exercise: e.exercise?._id ?? e.exercise, sets: e.sets }));
+        // re-saving after an edit never duplicates sets. Other exercises'
+        // notes are preserved.
+        const list = todaySession.exercises.map((e) => ({
+          exercise: e.exercise?._id ?? e.exercise, sets: e.sets, note: e.note ?? '',
+        }));
         const idx = list.findIndex((e) => e.exercise === ex._id);
-        if (idx >= 0) list[idx] = { exercise: ex._id, sets: payload };
-        else list.push({ exercise: ex._id, sets: payload });
+        if (idx >= 0) list[idx] = { exercise: ex._id, sets: payload, note };
+        else list.push({ exercise: ex._id, sets: payload, note });
         updated = await api.sessions.update(todaySession._id, { exercises: list });
       } else {
-        updated = await api.sessions.log({ date: new Date(date).toISOString(), exerciseId: ex._id, sets: payload });
+        updated = await api.sessions.log({ date: new Date(date).toISOString(), exerciseId: ex._id, sets: payload, note });
       }
+      if (isPR) setPr({ name: ex.name, weight: topSet });
       setSessions((prev) => {
         const rest = prev.filter((s) => s._id !== updated._id);
         return [updated, ...rest].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -178,9 +213,12 @@ export default function WorkoutPage() {
               whileTap={{ scale: 0.93 }}
               onClick={() => { setDayNum(d.day); setExpanded(null); }}
               className={`chip shrink-0 ${dayNum === d.day ? 'chip-active' : ''}`}
-              style={{ fontSize: 11, padding: '7px 14px' }}
+              style={{ fontSize: 11, padding: '7px 14px', opacity: d.manual && dayNum !== d.day ? 0.55 : 1 }}
             >
               Day {d.day} · {d.short}
+              {d.manual && (
+                <span style={{ fontSize: 8, marginLeft: 5, letterSpacing: '0.1em', opacity: 0.6 }}>OPT</span>
+              )}
             </motion.button>
           ))}
         </div>
@@ -233,6 +271,7 @@ export default function WorkoutPage() {
               const last   = getLastLog(sessions, ex._id, date);
               const open   = expanded === ex._id;
               const st     = status[ex._id];
+              const prog   = progressStatus(ex, sessions);
               return (
                 <motion.div
                   key={ex._id}
@@ -267,13 +306,19 @@ export default function WorkoutPage() {
                     </span>
 
                     <span className="flex-1 min-w-0">
-                      <span className="font-bold text-white block" style={{ fontSize: 15 }}>{ex.name}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-bold text-white block truncate" style={{ fontSize: 15 }}>{ex.name}</span>
+                        {prog.ready && <span className="progress-badge shrink-0">🎯 Progress</span>}
+                      </span>
                       <span className="num block mt-0.5" style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>
                         {logged
                           ? `${logged.length} ${logged.length === 1 ? 'set' : 'sets'} · ${Math.max(...logged.map((s) => s.weight))}kg`
                           : last
                             ? `Last · ${last.sets.length}×${Math.max(...last.sets.map((s) => s.weight))}kg · ${format(new Date(last.date), 'MMM d')}`
                             : 'Never logged'}
+                        {!prog.ready && prog.weight != null && prog.streak > 0 && (
+                          <span style={{ color: 'var(--accent-line)' }}> · {prog.streak}/{prog.need} @ {prog.weight}kg</span>
+                        )}
                       </span>
                     </span>
 
@@ -296,6 +341,25 @@ export default function WorkoutPage() {
                         style={{ overflow: 'hidden' }}
                       >
                         <div className="px-4 pb-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 14 }}>
+
+                          {/* Ready-to-progress callout — suggestion only, never forced */}
+                          {prog.ready && (
+                            <div className="cue-pill mb-3" style={{ borderLeftColor: 'var(--accent)', color: 'var(--accent)' }}>
+                              <span>🎯</span>
+                              <span>
+                                Hit {targetFor(ex).reps}×{targetFor(ex).sets} for {prog.need} sessions at {prog.weight}kg —
+                                time to add weight when you feel ready.
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Form cue */}
+                          {ex.cue && (
+                            <div className="cue-pill mb-3">
+                              <span style={{ color: 'var(--accent-line)' }}>▸</span>
+                              <span>{ex.cue}</span>
+                            </div>
+                          )}
 
                           {/* Last time reference */}
                           {last && (
@@ -334,6 +398,16 @@ export default function WorkoutPage() {
                             />
                           )}
 
+                          {/* Optional quick note for the day */}
+                          <input
+                            type="text"
+                            value={notes[ex._id] ?? ''}
+                            onChange={(e) => updNote(ex._id, e.target.value)}
+                            placeholder="Note (optional) — e.g. shoulder felt off"
+                            className="inp mt-3"
+                            style={{ fontSize: 13, padding: '11px 14px' }}
+                          />
+
                           {errors[ex._id] && (
                             <p className="mt-3" style={{ fontSize: 12, color: 'rgba(255,80,80,0.75)' }}>{errors[ex._id]}</p>
                           )}
@@ -369,6 +443,8 @@ export default function WorkoutPage() {
 
         <div className="h-4" />
       </div>
+
+      <PRCelebration pr={pr} onDone={() => setPr(null)} />
     </PageTransition>
   );
 }

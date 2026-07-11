@@ -8,6 +8,7 @@ import { getUpNext } from '@/lib/program';
 import { useCounter } from '@/hooks/useCounter';
 import PRCard from '@/components/PRCard';
 import SessionCard from '@/components/SessionCard';
+import BodyWeightCard from '@/components/BodyWeightCard';
 import PageTransition from '@/components/PageTransition';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
@@ -53,6 +54,17 @@ export default function Dashboard() {
   });
   const thisWeek = weeks[7];
   const lastWeek = weeks[6];
+
+  /* This week's training volume split by muscle group (populated categories). */
+  const thisWeekSessions = sessions.filter(s => { const d = new Date(s.date); return d >= weekStart; });
+  const split = (() => {
+    const map = {};
+    for (const s of thisWeekSessions) for (const ex of s.exercises) {
+      const cat = ex.exercise?.category ?? 'Other';
+      map[cat] = (map[cat] || 0) + ex.sets.reduce((a, set) => a + set.reps * set.weight, 0);
+    }
+    return Object.entries(map).map(([cat, v]) => ({ cat, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  })();
 
   const lastSession   = sessions[0] ?? null;
   const daysSince     = lastSession ? differenceInCalendarDays(today, new Date(lastSession.date)) : null;
@@ -152,6 +164,24 @@ export default function Dashboard() {
             >
               <TrendCard weeks={weeks} thisWeek={thisWeek} lastWeek={lastWeek} />
             </motion.div>
+
+            {/* ── Muscle split (this week) ── */}
+            {split.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.23, ease: EASE }}
+                className="card p-5 mb-2.5"
+              >
+                <p className="label mb-4">This Week · By Muscle</p>
+                <MuscleSplit split={split} />
+              </motion.div>
+            )}
+
+            {/* ── Body weight ── */}
+            <div className="mb-2.5">
+              <BodyWeightCard delay={0.26} />
+            </div>
 
             {/* ── Small stats ── */}
             <motion.div variants={list} initial="hidden" animate="show" className="grid grid-cols-2 gap-2.5 mb-8">
@@ -324,6 +354,34 @@ function TrendCard({ weeks, thisWeek, lastWeek }) {
         <span className="label" style={{ fontSize: 8, letterSpacing: '0.1em' }}>{format(weeks[0].start, 'MMM d')}</span>
         <span className="label" style={{ fontSize: 8, letterSpacing: '0.1em' }}>THIS WEEK</span>
       </div>
+    </div>
+  );
+}
+
+/* ── This-week volume split by muscle group — ranked bars ── */
+function MuscleSplit({ split }) {
+  const total = split.reduce((a, x) => a + x.v, 0) || 1;
+  return (
+    <div className="flex flex-col gap-3">
+      {split.map(({ cat, v }, i) => {
+        const pct = (v / total) * 100;
+        return (
+          <div key={cat}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{cat}</span>
+              <span className="num" style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{Math.round(pct)}%</span>
+            </div>
+            <div style={{ height: 5, borderRadius: 99, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.7, delay: 0.28 + i * 0.06, ease: EASE }}
+                style={{ height: '100%', borderRadius: 99, background: i === 0 ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

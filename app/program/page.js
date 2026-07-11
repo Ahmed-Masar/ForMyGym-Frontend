@@ -30,7 +30,7 @@ export default function ProgramPage() {
             PROGRAM
           </h1>
           <p className="label mt-2" style={{ color: 'rgba(255,255,255,0.18)' }}>
-            4-Day Hypertrophy Split
+            3-Day Upper Split · Legs Optional
           </p>
           <div className="mt-4 section-line" />
         </motion.div>
@@ -97,7 +97,9 @@ export default function ProgramPage() {
                       {String(item.day).padStart(2, '0')}
                     </span>
                     <div>
-                      <p className="label" style={{ fontSize: 8 }}>DAY {item.day}</p>
+                      <p className="label" style={{ fontSize: 8 }}>
+                        DAY {item.day}{item.manual && ' · OPTIONAL'}
+                      </p>
                       <p className="font-bold text-white" style={{ fontSize: 14, marginTop: 2 }}>
                         {item.label}
                       </p>

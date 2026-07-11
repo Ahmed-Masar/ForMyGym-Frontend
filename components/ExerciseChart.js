@@ -52,6 +52,7 @@ export default function ExerciseChart({ data }) {
       <div className="flex gap-1">
         {[
           { key: 'maxWeight', label: 'MAX WEIGHT' },
+          { key: 'e1rm',      label: 'EST. 1RM' },
           { key: 'volume',    label: 'VOLUME' },
         ].map(({ key, label }) => (
           <button
@@ -98,10 +99,10 @@ export default function ExerciseChart({ data }) {
           <Line
             type="monotone"
             dataKey={mode}
-            stroke="#ffffff"
+            stroke={mode === 'e1rm' ? '#6ff59a' : '#ffffff'}
             strokeWidth={1.5}
-            dot={{ fill: '#080808', stroke: '#ffffff', strokeWidth: 1.5, r: 3 }}
-            activeDot={{ fill: '#ffffff', r: 4, stroke: 'none' }}
+            dot={{ fill: '#080808', stroke: mode === 'e1rm' ? '#6ff59a' : '#ffffff', strokeWidth: 1.5, r: 3 }}
+            activeDot={{ fill: mode === 'e1rm' ? '#6ff59a' : '#ffffff', r: 4, stroke: 'none' }}
           />
         </LineChart>
       </ResponsiveContainer>

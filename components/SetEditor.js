@@ -3,23 +3,29 @@ import { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 let uid = 0;
-export const newSet = (reps = '', weight = '') => ({ id: ++uid, reps, weight });
+export const newSet = (reps = '', weight = '', rpe = '') => ({ id: ++uid, reps, weight, rpe });
 
 // Most sets repeat the previous one — prefill so a straight-sets workout
-// is one tap per set instead of retyping reps × weight every time.
+// is one tap per set instead of retyping reps × weight every time. RPE is
+// intentionally left blank on clone: effort is per-set, not carried over.
 export const cloneLastSet = (sets) => {
   const last = sets[sets.length - 1];
   return newSet(last?.reps ?? '', last?.weight ?? '');
 };
 
-export const fromLogged = (sets) => sets.map((s) => newSet(String(s.reps), String(s.weight)));
+export const fromLogged = (sets) =>
+  sets.map((s) => newSet(String(s.reps), String(s.weight), s.rpe != null ? String(s.rpe) : ''));
 
 // A set counts as long as reps is filled — empty weight means bodyweight (0),
 // so the last set is never silently dropped just because KG was left blank.
+// RPE is optional; only a value in 1–10 is kept.
 export const toPayload = (sets) =>
   sets
     .filter((s) => +s.reps > 0)
-    .map((s) => ({ reps: +s.reps, weight: +s.weight || 0 }));
+    .map((s) => {
+      const rpe = +s.rpe;
+      return { reps: +s.reps, weight: +s.weight || 0, ...(rpe >= 1 && rpe <= 10 ? { rpe } : {}) };
+    });
 
 // type="text" + inputMode keeps the numeric keypad but avoids iOS type="number"
 // quirks: Safari silently clears the field on blur when the value is "invalid"
@@ -57,11 +63,12 @@ export default function SetEditor({ sets, onAdd, onRemove, onUpdate, weightPlace
 
   return (
     <div ref={rowsRef} className="flex flex-col gap-2.5">
-      <div className="grid grid-cols-11 gap-2">
+      <div className="grid grid-cols-12 gap-2">
         <span className="col-span-1" />
-        <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>REPS</span>
+        <span className="col-span-3 label text-center" style={{ fontSize: 9 }}>REPS</span>
         <span className="col-span-1" />
-        <span className="col-span-4 label text-center" style={{ fontSize: 9 }}>KG</span>
+        <span className="col-span-3 label text-center" style={{ fontSize: 9 }}>KG</span>
+        <span className="col-span-3 label text-center" style={{ fontSize: 9 }}>RPE</span>
         <span className="col-span-1" />
       </div>
 
@@ -73,7 +80,7 @@ export default function SetEditor({ sets, onAdd, onRemove, onUpdate, weightPlace
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 8 }}
             transition={{ duration: 0.2 }}
-            className="grid grid-cols-11 gap-2 items-center"
+            className="grid grid-cols-12 gap-2 items-center"
           >
             <span className="col-span-1 num text-center" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
               {i + 1}
@@ -84,17 +91,25 @@ export default function SetEditor({ sets, onAdd, onRemove, onUpdate, weightPlace
               value={set.reps}
               onFocus={(e) => e.target.select()}
               onChange={(e) => onUpdate(i, 'reps', normalize(e.target.value, false))}
-              className="col-span-4 inp text-center num"
-              style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
+              className="col-span-3 inp text-center num"
+              style={{ padding: '12px 4px', fontSize: 16, borderRadius: 12 }}
             />
             <span className="col-span-1 text-center" style={{ color: 'rgba(255,255,255,0.15)', fontSize: 14 }}>×</span>
             <input
-              type="text" inputMode="decimal" placeholder={weightPlaceholder} enterKeyHint="done"
+              type="text" inputMode="decimal" placeholder={weightPlaceholder} enterKeyHint="next"
               value={set.weight}
               onFocus={(e) => e.target.select()}
               onChange={(e) => onUpdate(i, 'weight', normalize(e.target.value, true))}
-              className="col-span-4 inp text-center num"
-              style={{ padding: '12px 8px', fontSize: 16, borderRadius: 12 }}
+              className="col-span-3 inp text-center num"
+              style={{ padding: '12px 4px', fontSize: 16, borderRadius: 12 }}
+            />
+            <input
+              type="text" inputMode="numeric" placeholder="–" enterKeyHint="done"
+              value={set.rpe}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => onUpdate(i, 'rpe', normalize(e.target.value, false).slice(0, 2))}
+              className="col-span-3 inp text-center num"
+              style={{ padding: '12px 4px', fontSize: 15, borderRadius: 12, color: 'rgba(255,255,255,0.7)' }}
             />
             <button
               type="button"
