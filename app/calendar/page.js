@@ -11,6 +11,7 @@ import { useCounter } from '@/hooks/useCounter';
 import BottomSheet from '@/components/BottomSheet';
 import PageTransition from '@/components/PageTransition';
 import { usePullToRefresh } from '@/components/PullToRefresh';
+import { currentGymDayKey, parseDayKey } from '@/lib/gymDay';
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -25,8 +26,10 @@ function buildGrid(month) {
   return days;
 }
 
+// Counts back from the gym day (which, before the morning cutoff, is still
+// yesterday) so a not-yet-trained new calendar day doesn't drop the streak.
 function calcStreak(byDay) {
-  let cursor = new Date();
+  let cursor = parseDayKey(currentGymDayKey());
   if (!byDay.has(format(cursor, 'yyyy-MM-dd'))) cursor = addDays(cursor, -1);
   let streak = 0;
   while (byDay.has(format(cursor, 'yyyy-MM-dd'))) {
@@ -54,7 +57,7 @@ export default function CalendarPage() {
   const byDay = useMemo(() => {
     const map = new Map();
     for (const s of sessions) {
-      const key = format(new Date(s.date), 'yyyy-MM-dd');
+      const key = s.dateKey ?? format(new Date(s.date), 'yyyy-MM-dd');
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(s);
     }

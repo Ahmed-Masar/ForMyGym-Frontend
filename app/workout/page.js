@@ -6,17 +6,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { PROGRAM, getUpNext, getLastLog } from '@/lib/program';
 import { progressStatus, targetFor } from '@/lib/progression';
+import { currentGymDayKey, isLateNightGymDay, parseDayKey } from '@/lib/gymDay';
 import DatePicker from '@/components/DatePicker';
 import PageTransition from '@/components/PageTransition';
 import PRCelebration from '@/components/PRCelebration';
 import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/components/SetEditor';
+import LoggedTodayBar from '@/components/LoggedTodayBar';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const EASE = [0.16, 1, 0.3, 1];
 const CATEGORY_ORDER = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
 
 const norm = (s) => s.toLowerCase().trim();
-const dateKeyOf = (s) => new Date(s.date).toISOString().slice(0, 10);
+const dateKeyOf = (s) => s.dateKey ?? new Date(s.date).toISOString().slice(0, 10);
 
 
 function orderForDay(exercises, day) {
@@ -39,7 +41,7 @@ export default function WorkoutPage() {
   const [sessions, setSessions]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [dayNum, setDayNum]       = useState(null); // null until sessions load
-  const [date, setDate]           = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate]           = useState(currentGymDayKey());
   const [expanded, setExpanded]   = useState(null);
   const [drafts, setDrafts]       = useState({});   // { [exerciseId]: sets[] }
   const [notes, setNotes]         = useState({});   // { [exerciseId]: string }
@@ -153,7 +155,7 @@ export default function WorkoutPage() {
         else list.push({ exercise: ex._id, sets: payload, note });
         updated = await api.sessions.update(todaySession._id, { exercises: list });
       } else {
-        updated = await api.sessions.log({ date: new Date(date).toISOString(), exerciseId: ex._id, sets: payload, note });
+        updated = await api.sessions.log({ dateKey: date, exerciseId: ex._id, sets: payload, note });
       }
       if (isPR) setPr({ name: ex.name, weight: topSet });
       setSessions((prev) => {
@@ -226,6 +228,12 @@ export default function WorkoutPage() {
         {/* Date */}
         <div className="mb-4">
           <DatePicker value={date} onChange={setDate} />
+          {/* After-midnight heads-up: still logging to the night you started. */}
+          {isLateNightGymDay(date) && (
+            <p className="label mt-2" style={{ fontSize: 9, color: 'rgba(255,196,60,0.8)', textTransform: 'none', letterSpacing: '0.02em' }}>
+              🌙 Late-night session — logging to {format(parseDayKey(date), 'EEE, MMM d')}. Change the date above if this is a new day.
+            </p>
+          )}
         </div>
 
         {/* Progress */}
@@ -387,6 +395,10 @@ export default function WorkoutPage() {
                               </button>
                             </div>
                           )}
+
+                          {/* Already logged this day — saving updates it, but
+                              flag it so a re-log is a conscious choice. */}
+                          {logged && <LoggedTodayBar sets={logged} label="ALREADY LOGGED" />}
 
                           {drafts[ex._id] && (
                             <SetEditor

@@ -58,7 +58,7 @@ export default function ExerciseChart({ data }) {
           <button
             key={key}
             onClick={() => setMode(key)}
-            className={`forge-btn forge-btn-ghost px-3 py-1.5 rounded-sm text-[10px] ${
+            className={`px-3 py-1.5 rounded-sm text-[10px] ${
               mode === key ? 'text-white border-white/20 bg-white/[0.06]' : ''
             }`}
           >

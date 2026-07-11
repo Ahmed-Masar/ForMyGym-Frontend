@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import BottomSheet from '@/components/BottomSheet';
 import DatePicker from '@/components/DatePicker';
+import { currentGymDayKey } from '@/lib/gymDay';
 
 const EASE = [0.16, 1, 0.3, 1];
 
@@ -34,7 +35,7 @@ function Spark({ series }) {
 export default function BodyWeightCard({ delay = 0 }) {
   const [entries, setEntries] = useState([]);
   const [open, setOpen]       = useState(false);
-  const [date, setDate]       = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate]       = useState(currentGymDayKey());
   const [weight, setWeight]   = useState('');
   const [saving, setSaving]   = useState(false);
 
@@ -50,7 +51,7 @@ export default function BodyWeightCard({ delay = 0 }) {
     if (!(w > 0)) return;
     setSaving(true);
     try {
-      await api.bodyweight.save({ date: new Date(date).toISOString(), weight: w });
+      await api.bodyweight.save({ dateKey: date, weight: w });
       await load();
       setOpen(false);
       setWeight('');
@@ -68,7 +69,7 @@ export default function BodyWeightCard({ delay = 0 }) {
         <div className="flex items-center justify-between mb-3">
           <p className="label">Body Weight</p>
           <button
-            onClick={() => { setDate(format(new Date(), 'yyyy-MM-dd')); setWeight(latest ? String(latest.weight) : ''); setOpen(true); }}
+            onClick={() => { setDate(currentGymDayKey()); setWeight(latest ? String(latest.weight) : ''); setOpen(true); }}
             className="chip"
             style={{ fontSize: 10, padding: '5px 12px', fontWeight: 700 }}
           >

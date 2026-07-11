@@ -13,6 +13,8 @@ import BottomSheet from '@/components/BottomSheet';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import DatePicker from '@/components/DatePicker';
 import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/components/SetEditor';
+import LoggedTodayBar from '@/components/LoggedTodayBar';
+import { currentGymDayKey } from '@/lib/gymDay';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 
 const fade = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
@@ -30,11 +32,12 @@ export default function ExerciseDetailPage() {
   const [confirmDel, setConfirmDel]   = useState(false);
 
   const [logSheetOpen, setLogSheetOpen] = useState(false);
-  const [date, setDate]   = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate]   = useState(currentGymDayKey());
   const [sets, setSets]   = useState([newSet()]);
   const [saving, setSaving] = useState(false);
   const [logError, setLogError] = useState('');
   const [saved, setSaved]   = useState(false);
+  const [todaySets, setTodaySets] = useState([]); // already logged on `date`
 
   const load = useCallback(() =>
     Promise.all([api.exercises.list(), api.sessions.exercise(id)])
@@ -59,6 +62,17 @@ export default function ExerciseDetailPage() {
     }
   }
 
+  // What's already logged for this exercise on the chosen date — refreshed when
+  // the sheet opens or the date changes, so a re-log is always a conscious call.
+  useEffect(() => {
+    if (!logSheetOpen) { setTodaySets([]); return; }
+    let alive = true;
+    api.sessions.today(id, date)
+      .then((r) => { if (alive) setTodaySets(r.sets || []); })
+      .catch(() => { if (alive) setTodaySets([]); });
+    return () => { alive = false; };
+  }, [logSheetOpen, date, id]);
+
   const addSet    = () => setSets(p => [...p, cloneLastSet(p)]);
   const removeSet = (i) => setSets(p => { const next = p.filter((_, j) => j !== i); return next.length ? next : [newSet()]; });
   const updSet    = (i, f, v) => setSets(p => p.map((s, j) => j === i ? { ...s, [f]: v } : s));
@@ -71,7 +85,7 @@ export default function ExerciseDetailPage() {
     setSaving(true);
     setSaved(false);
     try {
-      await api.sessions.log({ date: new Date(date).toISOString(), exerciseId: id, sets: payload });
+      await api.sessions.log({ dateKey: date, exerciseId: id, sets: payload });
       setSaved(true);
       load();
       setTimeout(() => { setLogSheetOpen(false); setSets([newSet()]); }, 600);
@@ -292,6 +306,8 @@ export default function ExerciseDetailPage() {
               </button>
             </div>
           )}
+
+          <LoggedTodayBar sets={todaySets} />
 
           <div className="mt-1">
             <SetEditor

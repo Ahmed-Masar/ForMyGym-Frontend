@@ -9,6 +9,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import PageTransition from '@/components/PageTransition';
 import SetEditor, { newSet, toPayload, cloneLastSet } from '@/components/SetEditor';
 import { usePullToRefresh } from '@/components/PullToRefresh';
+import { currentGymDayKey } from '@/lib/gymDay';
 
 const EXERCISES = ['Extensors', 'Flexors', 'Brachioradialis'];
 
@@ -16,7 +17,7 @@ const emptyExercises = () => EXERCISES.map((name) => ({ name, sets: [newSet()] }
 const hasSets = (log) => log.exercises.some((e) => e.sets.length > 0);
 
 export default function ForearmPage() {
-  const [date, setDate]       = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate]       = useState(currentGymDayKey());
   const [exercises, setExercises] = useState(emptyExercises());
   const [logs, setLogs]       = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
@@ -31,7 +32,7 @@ export default function ForearmPage() {
 
   const refreshLogs = useCallback(() => Promise.all([
     api.forearm.list().then((all) => setLogs(all.filter(hasSets))),
-    api.forearm.streak().then((r) => setStreak(r.streak)),
+    api.forearm.streak(currentGymDayKey()).then((r) => setStreak(r.streak)),
   ]), []);
 
   const fetchDate = useCallback((d) => api.forearm.byDate(d).then((log) => {
@@ -88,7 +89,7 @@ export default function ForearmPage() {
     else { setSaving(true); setSaved(false); }
     try {
       await api.forearm.save({
-        date: new Date(date).toISOString(),
+        dateKey: date,
         exercises: exercises
           .filter((e) => targets.includes(e.name))
           .map((e) => ({ name: e.name, sets: toPayload(e.sets) })),

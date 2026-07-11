@@ -9,10 +9,12 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import DatePicker from '@/components/DatePicker';
 import PageTransition from '@/components/PageTransition';
 import SetEditor, { newSet, toPayload, fromLogged, cloneLastSet } from '@/components/SetEditor';
+import LoggedTodayBar from '@/components/LoggedTodayBar';
 import { useCounter } from '@/hooks/useCounter';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { PROGRAM, getLastLog } from '@/lib/program';
 import { defaultTarget, targetFor } from '@/lib/progression';
+import { currentGymDayKey } from '@/lib/gymDay';
 
 const CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio', 'Other'];
 // Day filters follow the program split — one source of truth in lib/program.js.
@@ -33,11 +35,12 @@ export default function ExercisesPage() {
   const [activeDay, setActiveDay] = useState(null);
 
   const [logEx, setLogEx]         = useState(null);
-  const [logDate, setLogDate]     = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [logDate, setLogDate]     = useState(currentGymDayKey());
   const [logSets, setLogSets]     = useState([newSet()]);
   const [logSaving, setLogSaving] = useState(false);
   const [logError, setLogError]   = useState('');
   const [logSaved, setLogSaved]   = useState(false);
+  const [logToday, setLogToday]   = useState([]); // sets already logged on logDate
 
   const load = useCallback(() => Promise.all([
     api.exercises.list().then(setExercises),
@@ -105,11 +108,22 @@ export default function ExercisesPage() {
 
   function openLog(ex) {
     setLogEx(ex);
-    setLogDate(format(new Date(), 'yyyy-MM-dd'));
+    setLogDate(currentGymDayKey());
     setLogSets([newSet()]);
     setLogError('');
     setLogSaved(false);
   }
+
+  // Fresh check of what's already logged for this exercise on the chosen date,
+  // so switching the date re-checks and a stale sessions snapshot can't hide it.
+  useEffect(() => {
+    if (!logEx) { setLogToday([]); return; }
+    let alive = true;
+    api.sessions.today(logEx._id, logDate)
+      .then((r) => { if (alive) setLogToday(r.sets || []); })
+      .catch(() => { if (alive) setLogToday([]); });
+    return () => { alive = false; };
+  }, [logEx, logDate]);
 
   const addLogSet    = () => setLogSets(p => [...p, cloneLastSet(p)]);
   const removeLogSet = (i) => setLogSets(p => { const n = p.filter((_, j) => j !== i); return n.length ? n : [newSet()]; });
@@ -122,7 +136,7 @@ export default function ExercisesPage() {
     setLogError('');
     setLogSaving(true);
     try {
-      await api.sessions.log({ date: new Date(logDate).toISOString(), exerciseId: logEx._id, sets: payload });
+      await api.sessions.log({ dateKey: logDate, exerciseId: logEx._id, sets: payload });
       api.sessions.list().then(setSessions).catch(() => {});
       setLogSaved(true);
       setTimeout(() => setLogEx(null), 600);
@@ -386,6 +400,8 @@ export default function ExercisesPage() {
                 </button>
               </div>
             )}
+
+            <LoggedTodayBar sets={logToday} />
 
             <div className="mt-1">
               <SetEditor
